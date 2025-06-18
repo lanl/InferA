@@ -1,0 +1,14 @@
+{
+    "accumulatedcores": "",
+    "bighaloparticles": "This table contains information about particles in large dark matter halos. Each entry is one particle. 'fof_halo_tag' refers to the halo that the particle belongs to, and also serves as a reference key to relate this table to other tables in the database.",
+    "coreparticles": "This table contains information about core particles, the subset of particles that occupy the central region of dark matter halos. Each entry is one particle. 'fof_halo_tag' refers to the halo that the particle belongs to, and also serves as a reference key to relate this table to other tables in the database.",
+    "galaxyparticles": "This table contains information about particles in galaxies. Each entry is one particle. 'gal_tag' refers to the galaxy that the particle belongs to, and also serves as a reference key to relate this table to the 'galaxyproperties' table.",
+    "galaxyparticles.subgrid": "",
+    "galaxyproperties": "This table contains properties of a galaxy where 'fof_halo_tag' refers to the dark matter halo it belongs to. Each entry is one galaxy. 'gal_tag' refers to the id of the galaxy, and also serves as a reference key to relate this table to the 'galaxyproperties' table.",
+    "galaxypropertybins": "This table contains binning information of the particles in a galaxy.",
+    "haloparticles": "This table contains information about particles in dark matter halos. Each entry is one particle. 'fof_halo_tag' refers to the halo that the particle belongs to, and also serves as a reference key to relate this table to other tables in the database.",
+    "haloparticletags": "This table contains relational database information. Each entry is one particle. 'fof_halo_tag' refers to the halo that the particle belongs to. 'id' refers to the unique identifier for each particle.",
+    "haloproperties": "This table contains properties of dark matter halos computed by the friend-of-friends (fof) algorithm or spherical overdensity (sod) algorithm. Each entry is one dark matter halo. 'fof_halo_tag' refers to the halo that the particle belongs to, and also serves as a reference key to relate this table to other tables in the database.",
+    "sodbighaloparticles": "This table contains information about particles in a dark matter halo, where the dark matter halo was calculated using the spherical overdensity (sod) algorithm. Each entry is one particle. 'fof_halo_tag' refers to the halo that the particle belongs to, and also serves as a reference key to relate this table to other tables in the database.",
+    "sodbighaloparticles.subgrid": ""
+}

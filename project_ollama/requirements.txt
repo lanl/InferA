@@ -1,0 +1,37 @@
+# llm local server
+ollama
+
+# for agent and workflow setup
+langchain
+langchain-community
+langchain-core
+langchain-openai
+langchain-ollama
+langchain-experimental
+langgraph
+
+requests
+pydantic
+
+# setup sandbox - tabulate needed for pandas agent
+fastapi
+uvicorn
+python-multipart
+tabulate
+asyncio
+pandasai=2.3.0
+
+pandas
+numpy
+plotly
+typer
+tqdm
+pytest
+pytest-cov
+
+# pyvista[all]
+# trame
+numba
+
+# for html visualization outside of server
+panel
