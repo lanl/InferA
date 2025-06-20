@@ -33,11 +33,7 @@ ENABLE_CONSOLE_LOGGING = True
 
 # graph_builder.py configs - shortcut to skip user query and directly test later nodes
 TEST_WORKFLOW = False # If true, swap initial state to use one of the task states. This will skip over user input.
-<<<<<<< HEAD
-TEST_PANDAS = True
-=======
 TEST_PANDAS = False
->>>>>>> refs/remotes/origin/main
 
 # node_base.py configs - node-wise debug and verbose flags to print node values
 NODE_VERBOSE = True

@@ -1,8 +1,11 @@
 lanlchain.pem
+*.log
 
 logs/*
 output/*
+exports/*
 genericio/*
+cache/*
 
 src/data/JSON/*
 src/deprecated

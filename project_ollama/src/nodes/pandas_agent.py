@@ -100,7 +100,8 @@ class PandasAgentNode(NodeBase):
 
 
     def extract_variable_names(self, question: str):
-        llm_json = self.llm.bind(format="json")
+        # llm_json = self.llm.bind(format="json")
+        llm_json = self.llm
         parser = JsonOutputParser(pydantic_object=ExtractedVariables)
         prompt = PromptTemplate(
             template= extract_template,

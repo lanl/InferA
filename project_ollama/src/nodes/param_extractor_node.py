@@ -118,7 +118,8 @@ def generate_task(llm, query:str) -> str:
 
 
 def generate_task_parameters(llm, query:str, task:str, params: list) -> Dict:
-    llm_json = llm.bind(format="json")
+    # llm_json = llm.bind(format="json")
+    llm_json = llm
     parser = JsonOutputParser(pydantic_object=FileParam)
     
     prompt = PromptTemplate(

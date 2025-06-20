@@ -4,10 +4,6 @@ import pandas as pd
 import numpy as np
 import typer
 
-import webbrowser
-import subprocess
-import time
-
 from src.utils import genericio_utils as gio_utils
 from src.deprecated import analysis_functions
 from src.deprecated import preprocess_data

@@ -1,14 +1,30 @@
 from langchain_ollama import ChatOllama
 from langchain_ollama import OllamaEmbeddings
 from langchain_openai import ChatOpenAI
-<<<<<<< HEAD
 from langchain_openai import OpenAIEmbeddings
-=======
->>>>>>> refs/remotes/origin/main
 
 from langchain.callbacks.base import BaseCallbackHandler
 
 from openai import DefaultHttpxClient
+
+# import all lanlAI configs
+from src.utils.config import (
+    ENABLE_LANLAI, 
+    LANLAI_API_URL, 
+    LANLAI_API_TOKEN, 
+    LANLAI_MODEL_NAME, 
+    PATH_TO_LANLCHAIN_PEM
+)
+from src.utils.config import (
+    ENABLE_OPENAI,
+    OPENAI_API_KEY,
+    OPENAI_MODEL_NAME
+)
+# import all local ollama configs
+from src.utils.config import (
+    OLLAMA_API_URL, 
+    OLLAMA_MODEL_NAME
+)
 
 from src.utils.logger_config import get_logger
 
@@ -39,79 +55,17 @@ class TokenTrackingHandler(BaseCallbackHandler):
         }
 
 
-# import all lanlAI configs
-from src.utils.config import (
-    ENABLE_LANLAI, 
-    LANLAI_API_URL, 
-    LANLAI_API_TOKEN, 
-    LANLAI_MODEL_NAME, 
-    PATH_TO_LANLCHAIN_PEM
-)
-from src.utils.config import (
-    ENABLE_OPENAI,
-    OPENAI_API_KEY,
-    OPENAI_MODEL_NAME
-)
-# import all local ollama configs
-from src.utils.config import (
-    OLLAMA_API_URL, 
-    OLLAMA_MODEL_NAME
-)
-
-<<<<<<< HEAD
-=======
-# class ChatLanlAI(LLM):
-#     client: Any
-#     model_name: str
-#     temperature: float
-
-#     def _call(
-#         self,
-#         prompt: str,
-#         stop: Optional[List[str]] = None,
-#         run_manager: Optional[CallbackManagerForLLMRun] = None,
-#         **kwargs: Any,
-#     ) -> str:
-#         message = [{"role": "user", "content": prompt}]
-#         response = self.client.chat.completions.create(
-#             model=self.model_name,
-#             temperature = self.temperature,
-#             messages=message,
-#         )
-#         ai_message = AIMessage(content = response.choices[0].message.content)
-#         logger.info(f"[AI_MESSAGE] {ai_message}")
-#         return ai_message
-    
-#     @property
-#     def _llm_type(self) -> str:
-#         return "custom_model"
-
->>>>>>> refs/remotes/origin/main
-
 temperature = 0
 token_tracker = TokenTrackingHandler()
 if ENABLE_LANLAI:
     try:
-<<<<<<< HEAD
-=======
-        # client = OpenAI(
-        #     api_key = LANLAI_API_TOKEN,
-        #     base_url=LANLAI_API_URL,
-        #     http_client=DefaultHttpxClient(verify=PATH_TO_LANLCHAIN_PEM),
-        # )
-        # llm = ChatLanlAI(client=client, model_name = LANLAI_MODEL_NAME, temperature = temperature)
->>>>>>> refs/remotes/origin/main
         llm = ChatOpenAI(
             api_key = LANLAI_API_TOKEN,
             model = LANLAI_MODEL_NAME,
             base_url= LANLAI_API_URL,
             http_client=DefaultHttpxClient(verify=PATH_TO_LANLCHAIN_PEM),
-<<<<<<< HEAD
             temperature = temperature,
             callbacks = [token_tracker]
-=======
-            temperature = temperature
->>>>>>> refs/remotes/origin/main
         )
         print(f"""
             ###########################

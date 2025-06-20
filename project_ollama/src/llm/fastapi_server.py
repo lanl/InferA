@@ -36,7 +36,7 @@ async def query_agent(request: Request, pandas_code: str = Form(...), file: Uplo
         if isinstance(result, pd.DataFrame):
             response = result.to_dict(orient='list')
         elif isinstance(result, pd.Series):
-            response = result.to_dict(orient='list')
+            response = result.to_dict()
         else:
             response = str(result)
         return {"response": response}

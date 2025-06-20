@@ -19,7 +19,7 @@ uvicorn
 python-multipart
 tabulate
 asyncio
-pandasai=2.3.0
+# pandasai
 
 pandas
 numpy
