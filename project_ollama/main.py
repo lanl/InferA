@@ -60,8 +60,6 @@ class MultiAgentSystem:
         ):
             pretty_print_messages(chunk, last_message=True)
 
-        
-
 
 def main():
     system = MultiAgentSystem()
