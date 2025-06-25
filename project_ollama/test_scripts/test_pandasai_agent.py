@@ -10,10 +10,6 @@ warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
 from src.utils.config import (OPENAI_API_KEY, OPENAI_MODEL_NAME, LANLAI_API_TOKEN, LANLAI_MODEL_NAME, LANLAI_API_URL, PATH_TO_LANLCHAIN_PEM)
 
-from src.utils.logger_config import get_logger
-
-logger = get_logger(__name__)
-
 def start_fastapi():
     uvicorn.run("llm.fastapi_server:app", host="127.0.0.1", port=8000, reload=False, log_level="info")
 

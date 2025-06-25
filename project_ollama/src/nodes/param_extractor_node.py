@@ -1,5 +1,5 @@
 import re
-
+import logging
 from typing import Tuple, List, Dict, Any
 
 from langchain_core.output_parsers.json import JsonOutputParser
@@ -8,9 +8,8 @@ from pydantic import BaseModel, ConfigDict
 
 from src.langgraph_class.node_base import NodeBase
 from src.workflows.registry import required_fields_by_task
-from src.utils.logger_config import get_logger
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 class UserInputNode(NodeBase):
     def __init__(self):

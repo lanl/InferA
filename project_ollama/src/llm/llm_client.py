@@ -1,10 +1,10 @@
 from langchain_ollama import ChatOllama
 from langchain_ollama import OllamaEmbeddings
+
 from langchain_openai import ChatOpenAI
 from langchain_openai import OpenAIEmbeddings
 
 from langchain.callbacks.base import BaseCallbackHandler
-
 from openai import DefaultHttpxClient
 
 # import all lanlAI configs
@@ -26,9 +26,7 @@ from src.utils.config import (
     OLLAMA_MODEL_NAME
 )
 
-from src.utils.logger_config import get_logger
-
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 class TokenTrackingHandler(BaseCallbackHandler):
     def __init__(self):

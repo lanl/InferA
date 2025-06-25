@@ -1,13 +1,14 @@
 import logging
-from src.utils.logger_config import get_logger
 from src.utils.config import NODE_VERBOSE, NODE_DEBUG
+
+logger = logging.getLogger(__name__)
 
 class NodeBase:
     def __init__(self, name: str):
         self.name = name
         self.debug = NODE_DEBUG
         self.verbose = NODE_VERBOSE
-        self.logger = get_logger(self.name)
+        self.logger = logger
 
     def _log(self, message: str):
         self.logger.info(message)

@@ -2,10 +2,8 @@
 import logging
 import os
 from datetime import datetime
-from src.utils.config import ENABLE_LOGGING, ENABLE_DEBUG, ENABLE_CONSOLE_LOGGING
 
 # Config flags
-
 def setup_logger(enable_logging: bool, enable_debug: bool, enable_console_logging: bool = False):
     LOG_DIR = "logs"
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -45,12 +43,4 @@ def setup_logger(enable_logging: bool, enable_debug: bool, enable_console_loggin
             # No logging anywhere
             root_logger.addHandler(logging.NullHandler())
 
-def get_logger(name: str) -> logging.Logger:
-    """
-    Retrieve a logger instance configured via setup_logger.
-    """
-    return logging.getLogger(name)
-
-
-# Initialize logger on import
-setup_logger(ENABLE_LOGGING, ENABLE_DEBUG, ENABLE_CONSOLE_LOGGING)
+    return root_logger

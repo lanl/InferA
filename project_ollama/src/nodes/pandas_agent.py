@@ -10,6 +10,7 @@ into pandas code and executed.
 """
 
 import pandas as pd
+import logging
 from typing import Tuple, List, Dict, Any
 
 from langchain.prompts import PromptTemplate
@@ -22,10 +23,9 @@ from src.prompts.prompt_templates import extract_template, pandas_agent_template
 
 from src.utils.json_loader import extract_code_block
 from src.utils.dataframe_utils import pretty_print_df, pretty_print_dict
-from src.utils.logger_config import get_logger
 from src.utils.config import TEST_PANDAS, ENABLE_OPENAI
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class ExtractedVariables(BaseModel):

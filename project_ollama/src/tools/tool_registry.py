@@ -1,28 +1,30 @@
 from langchain_core.tools import tool
 import pandas as pd
 
-@tool(parse_docstring=True)
-def load_data(timestep: int, object: str) -> pd.DataFrame:
-    """Load data from a simulation file based on simulation name, timestep, and object to load. 'timestep' and 'object' must be explicitly stated. 
-    'object' can be one of the following: [haloproperties, galaxyproperties, haloparticles, galaxyparticles]
-    
-    Args:
-        timestep: Timestep of simulation to load from.
-        object: object type in simulation to load data about.
+@tool
+def filter_dataframe(df: pd.DataFrame, column: str, condition: str) -> pd.DataFrame | str:
     """
-    df = pd.DataFrame()
-    return df
+    Filter a DataFrame based on a condition applied to a column.
 
-@tool(parse_docstring=True)
-def filter_data(data_key: str, condition: str, state: dict) -> pd.DataFrame:
-    """Filter a DataFrame using a condition string like 'id == 123'.
-    
     Args:
-        data_key: data_key in state to retrieve dataframe to use
-        condition: Condition to filter dataframe using query.
+        df: The input DataFrame to filter.
+        column: Column name to apply the condition on.
+        condition: A string condition, like '> 10', '== "star"', '<= 5'.
+
+    Returns:
+        Filtered DataFrame, or an error message string if invalid.
     """
-    data = state.get(data_key)
-    return data.query(condition)
+    if column not in df.columns:
+        return f"ColumnNotFound: {column}"
+
+    try:
+        # Build and evaluate the query string
+        query_str = f"`{column}` {condition}"
+        filtered_df = df.query(query_str)
+        return filtered_df
+    except Exception as e:
+        return f"FilterError: {e}"
+
 
 @tool(parse_docstring=True)
 def summarize_data(data_key: str, state: dict) -> dict:
@@ -47,4 +49,4 @@ def plot_data(data_key: str, x: str, y: str, z: str) -> dict:
     return {"plot": f"chart of {y} over {x}"}
 
 
-TOOL_REGISTRY = [load_data, filter_data, summarize_data, plot_data]
+# TOOL_REGISTRY = [load_data, filter_data, summarize_data, plot_data]

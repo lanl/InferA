@@ -9,6 +9,7 @@ langchain-openai
 langchain-ollama
 langchain-experimental
 langgraph
+langgraph-supervisor
 
 requests
 pydantic
@@ -28,6 +29,7 @@ typer
 tqdm
 pytest
 pytest-cov
+pretty-repr
 
 # pyvista[all]
 # trame

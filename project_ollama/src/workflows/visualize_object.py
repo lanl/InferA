@@ -2,13 +2,13 @@ import os
 import zipfile
 import numpy as np
 import pyvista as pv
+import logging
 
 from src.utils import genericio_utils as gio_utils
-from src.utils.logger_config import get_logger
 
 from src.workflows.base_workflow import BaseWorkflow
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 output_dir = "output/"
 

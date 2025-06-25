@@ -335,6 +335,7 @@ def read_output_file(output_path, timestep: int):
     values = gio.read(file, output_vars)
     return values
 
+
 def read_gio_to_df(base_path, object_type: str, timestep: int, file_type: str, vars = None):
     """
     Read a file for the object_type into a dataframe.
@@ -346,5 +347,18 @@ def read_gio_to_df(base_path, object_type: str, timestep: int, file_type: str, v
 
     # Read file into a dataframe
     values = gio.read(file, vars)
+    df = pd.DataFrame(np.column_stack(values), columns=vars)
+    return df
+
+def load_gio_to_df(file_path):
+    """
+    Read a file for the object_type into a dataframe.
+    """
+    ext = file_path.split(".")[-1]
+    if not vars:
+        vars = json_loader.get_variable_names_from_json(f"{ext}")
+
+    # Read file into a dataframe
+    values = gio.read(file_path, vars)
     df = pd.DataFrame(np.column_stack(values), columns=vars)
     return df

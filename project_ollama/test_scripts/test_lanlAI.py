@@ -3,11 +3,8 @@ from dotenv import load_dotenv
 
 from openai import DefaultHttpxClient, OpenAI
 from langchain_openai import ChatOpenAI
-<<<<<<< HEAD:project_ollama/test_scripts/test_lanlAI.py
 
 from src.llm.llm_client import llm, token_tracker
-=======
->>>>>>> refs/remotes/origin/main:project_ollama/test_lanlAI.py
 
 load_dotenv()
 
@@ -32,10 +29,7 @@ client = ChatOpenAI(
 
 # Simple loop to interact with the model
 if __name__ == "__main__":
-<<<<<<< HEAD:project_ollama/test_scripts/test_lanlAI.py
     completion = llm.invoke("Hello, how are you?")
-=======
->>>>>>> refs/remotes/origin/main:project_ollama/test_lanlAI.py
     # completion = client.chat.completions.create(
     #     model="gpt-4o-mini",
     #     messages=[
@@ -46,10 +40,7 @@ if __name__ == "__main__":
     # print(completion.choices[0].message.content)
     print(completion)
     print(type(completion))
-<<<<<<< HEAD:project_ollama/test_scripts/test_lanlAI.py
     print(token_tracker.get_usage())
-=======
->>>>>>> refs/remotes/origin/main:project_ollama/test_lanlAI.py
     
     # print(client.models.list())
     # completion = client.chat.completions.create(

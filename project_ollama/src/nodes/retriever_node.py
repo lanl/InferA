@@ -1,4 +1,5 @@
 import json
+import logging
 from typing_extensions import List, TypedDict
 
 from langchain_core.documents import Document
@@ -6,8 +7,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.vectorstores import InMemoryVectorStore
 
 from src.langgraph_class.node_base import NodeBase
-from src.utils.logger_config import get_logger
 
+logger = logging.getLogger(__name__)
 
 class RetrieverNode(NodeBase):
     def __init__(self, embedding_model, schema_path="src/data/JSON/data_variables.json"):

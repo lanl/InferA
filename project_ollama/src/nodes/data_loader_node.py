@@ -1,13 +1,13 @@
 import os
 import json
 import re
+import logging
 from collections import defaultdict
 from typing import List, Tuple, Dict
 
 from src.langgraph_class.node_base import NodeBase
-from src.utils.logger_config import get_logger
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 class DataLoaderNode(NodeBase):
     """

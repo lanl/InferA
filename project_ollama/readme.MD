@@ -40,7 +40,7 @@ python -m venv venv_project_ollama
 source venv_project_ollama/bin/activate
 ```
 
-2. Make sure python environment is activated. Installed modules using:
+2. Make sure python environment is activated. Install modules using:
 ```
 python -m pip install -r requirements.txt
 ```

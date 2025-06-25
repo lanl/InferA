@@ -1,9 +1,9 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 import pandas as pd
 import numpy as np
-from src.utils.logger_config import get_logger
+import logging
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 

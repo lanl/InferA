@@ -2,10 +2,9 @@ import json
 import requests
 import pandas as pd
 import tempfile
+import logging
 
-from src.utils.logger_config import get_logger
-
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 def query_dataframe_agent(df: pd.DataFrame, pandas_code: str, api_url: str = "http://127.0.0.1:8000") -> str:
     """
