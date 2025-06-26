@@ -1,31 +1,29 @@
 import json
 import logging
+from typing_extensions import List, TypedDict
 
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.vectorstores import InMemoryVectorStore
-from langchain_core.messages import AIMessage
 
 from src.langgraph_class.node_base import NodeBase
 
 logger = logging.getLogger(__name__)
 
-class Node(NodeBase):
+class RetrieverNode(NodeBase):
     def __init__(self, embedding_model, schema_path="src/data/JSON/data_variables.json"):
-        super().__init__("Retriever")
-        logger.info("[RETRIEVER] Setting up embedded model...")
+        super().__init__("RetrieverNode")
         self.embedding_model = embedding_model
         self.schema_path = schema_path
-        self.vector_store = self._build_vector_store()
-        self.retriever = self.vector_store.as_retriever()
-        logger.info("[RETRIEVER] Embedded model setup.")
-
+        self.vector_store = None
+        # self.vector_store = self._build_vector_store()
 
     def run(self, state):
-        query = state["task"]
-        docs = self.retriever.invoke(query)
-        return {"messages": [AIMessage(f"Retrieved relevant documents for query: {query}")], "retrieved_docs": docs, "next": state["current"], "current": "Retriever"}
+        self.vector_store = self._build_vector_store()
 
+        retriever = self.vector_store.as_retriever()
+        state["retriever"] = retriever
+        return state
 
     def _build_vector_store(self):
         with open(self.schema_path) as f:

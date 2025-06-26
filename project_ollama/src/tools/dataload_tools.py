@@ -36,34 +36,34 @@ def normalize_path(file_path: str) -> str:
     return os.path.normpath(file_path)
 
 # @tool
-def write_index_to_db(file_index: dict, db_path: Annotated[str, "Path to the db file"] = './db.duckdb') -> str:
-    """
-    Load all data files from the full file index
+# def write_index_to_db(file_index: dict, db_path: Annotated[str, "Path to the db file"] = './db.duckdb') -> str:
+#     """
+#     Load all data files from the full file index
     
-    Args:
-        index: Nested dictionary structured as index[sim_id][timestep][object] = path or list of paths.
+#     Args:
+#         index: Nested dictionary structured as index[sim_id][timestep][object] = path or list of paths.
     
-    Returns:
-        dict: A dictionary of data frames organized by data[sim_id][timestep][object] = pd.dataframe
-    """
-    try:
-        file_path = normalize_path(db_path)
-        logger.info(f"[DATA LOAD TOOL] Creating db: {file_path}")
+#     Returns:
+#         dict: A dictionary of data frames organized by data[sim_id][timestep][object] = pd.dataframe
+#     """
+#     try:
+#         file_path = normalize_path(db_path)
+#         logger.info(f"[DATA LOAD TOOL] Creating db: {file_path}")
 
-        data = {}
-        for sim_id, ts_dict in file_index.items():
-            for ts, object_dict in tqdm(ts_dict.items()):
-                for object, file_path in object_dict.items():
-                    data[sim_id][ts][object] = load_gio_to_df(file_path)
-        return data
+#         data = {}
+#         for sim_id, ts_dict in file_index.items():
+#             for ts, object_dict in tqdm(ts_dict.items()):
+#                 for object, file_path in object_dict.items():
+#                     data[sim_id][ts][object] = load_gio_to_df(file_path)
+#         return data
     
-    except Exception as e:
-        logger.error(f"Error while saving db: {str(e)}")
-        return f"Error while saving db: {str(e)}"
+#     except Exception as e:
+#         logger.error(f"Error while saving db: {str(e)}")
+#         return f"Error while saving db: {str(e)}"
 
 
-# @tool(parse_docstring=True)
-def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: Annotated[str, InjectedToolCallId]) -> dict:
+@tool(parse_docstring=True)
+def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
     """Load file index from a simulation file based on simulation index, timestep and object to load. 'simulation', 'timestep' and 'object' must be explicitly stated.
     
     Args:
@@ -106,7 +106,7 @@ def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: A
             # Validate all timesteps first
             missing_timesteps = [ts for ts in timestep if ts not in index[sim_id]]
             if missing_timesteps:
-                return "TimeStepError"
+                raise Exception("TimeStepError")
 
             # Load requested timesteps
             for ts in timestep:
@@ -114,9 +114,16 @@ def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: A
                 filtered = {obj: data_at_ts[obj] for obj in object if obj in data_at_ts}
                 if filtered:
                     result[sim_id][ts] = filtered
-
-    # state_update = {"file_index": result, "messages": [ToolMessage("Files indexed and ready to be dynamically loaded.", tool_call_id = tool_call_id)]}
-    return result
+                    
+    return Command(update={
+        "file_index": result,
+        "messages": [
+            ToolMessage(
+                "Successfully loaded file index information",
+                tool_call_id=tool_call_id,
+            )
+        ]
+    })
 
 
 def index_simulation_directories(root_paths: List[str], valid_object_types: set) -> Dict[Tuple[float, float, float], Dict[int, Dict[str, str]]]:
@@ -163,9 +170,9 @@ def index_simulation_directories(root_paths: List[str], valid_object_types: set)
     return index
 
 
-def main():
-    index = load_file_index([0], [102], ["haloproperties"], 1)
-    # write_index_to_db(index)
+# def main():
+#     index = load_file_index([0], [102], ["haloproperties"], 1)
+#     # write_index_to_db(index)
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

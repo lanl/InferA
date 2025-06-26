@@ -13,22 +13,23 @@ LANLAI_API_TOKEN = os.getenv("lanlAI_token")
 # LANLAI_MODEL_NAME = "meta.llama3-70b-instruct-v1:0"
 # LANLAI_MODEL_NAME = "anthropic.claude-3-haiku-20240307-v1:0"
 LANLAI_MODEL_NAME = "anthropic.claude-3-5-sonnet-20240620-v1:0"
-IS_CLAUDE = True
 PATH_TO_LANLCHAIN_PEM = "lanlchain.pem"
 
 ENABLE_OPENAI = False
 OPENAI_API_KEY = os.getenv("OPENAI_KEY")
 OPENAI_MODEL_NAME = "gpt-4.1-nano"
+OPENAI_EMBED_MODEL_NAME = "text-embedding-ada-002"
 
 # Local Ollama setup
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL_NAME = "mistral-small3.1:latest"  # Or any model you've pulled
 
 # Local embedding model setup
-OLLAMA_EMBEDDING_NAME = "nomic-embed-text:latest"
+OLLAMA_EMBED_MODEL_NAME = "nomic-embed-text:latest"
 
 # Working directory to save files
 WORKING_DIRECTORY = "./data_storage/"
+STATE_DICT_PATH = "./state/state.pkl"
 
 # logger_config.py setup
 ENABLE_LOGGING = True
@@ -40,5 +41,4 @@ TEST_WORKFLOW = False # If true, swap initial state to use one of the task state
 TEST_PANDAS = False
 
 # node_base.py configs - node-wise debug and verbose flags to print node values
-NODE_VERBOSE = True
 NODE_DEBUG = False

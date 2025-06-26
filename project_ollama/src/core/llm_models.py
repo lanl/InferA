@@ -20,12 +20,14 @@ from src.utils.config import (
 from src.utils.config import (
     ENABLE_OPENAI,
     OPENAI_API_KEY,
-    OPENAI_MODEL_NAME
+    OPENAI_MODEL_NAME,
+    OPENAI_EMBED_MODEL_NAME
 )
 # import all local ollama configs
 from src.utils.config import (
     OLLAMA_API_URL, 
-    OLLAMA_MODEL_NAME
+    OLLAMA_MODEL_NAME,
+    OLLAMA_EMBED_MODEL_NAME
 )
 
 logger = logging.getLogger(__name__)
@@ -49,6 +51,7 @@ class LanguageModelManager:
             if ENABLE_LANLAI:
                 server = "LanlAI Portal"
                 model = LANLAI_MODEL_NAME
+                embed_model = OLLAMA_EMBED_MODEL_NAME + " (via Local Ollama)"
                 self.llm = ChatOpenAI(
                     api_key = LANLAI_API_TOKEN,
                     model = LANLAI_MODEL_NAME,
@@ -77,11 +80,12 @@ class LanguageModelManager:
                     model_kwargs = {"response_format": {"type": "json_object"}},
                     callbacks = [self.token_tracker],
                 )
-                self.embed_llm = OllamaEmbeddings(model="nomic-embed-text:latest")
-                
+                self.embed_llm = OllamaEmbeddings(model=OLLAMA_EMBED_MODEL_NAME)
+
             elif ENABLE_OPENAI:
                 server = "OpenAI API"
                 model = OPENAI_MODEL_NAME
+                embed_model = OPENAI_EMBED_MODEL_NAME
                 self.llm = ChatOpenAI(
                     api_key = OPENAI_API_KEY,
                     model_name = OPENAI_MODEL_NAME,
@@ -104,11 +108,15 @@ class LanguageModelManager:
                     model_kwargs={"response_format": {"type": "json_object"}},
                     callbacks = [self.token_tracker],
                 )
-                self.embed_llm = OllamaEmbeddings(model="nomic-embed-text:latest")
+                self.embed_llm = OpenAIEmbeddings(
+                    api_key = OPENAI_API_KEY,
+                    model = OPENAI_EMBED_MODEL_NAME
+                )
 
             else:
                 server = "Local Ollama"
                 model = OLLAMA_MODEL_NAME
+                embed_model = OLLAMA_EMBED_MODEL_NAME
                 # Default to local Ollama model
                 self.llm = ChatOpenAI(
                     model=OLLAMA_MODEL_NAME,
@@ -135,15 +143,15 @@ class LanguageModelManager:
                     model_kwargs={"response_format": {"type": "json_object"}},
                     callbacks = [self.token_tracker],
                 )
-                self.embed_llm = OllamaEmbeddings(model="nomic-embed-text:latest")
-
+                self.embed_llm = OllamaEmbeddings(model=OLLAMA_EMBED_MODEL_NAME)
             
             self.logger.info("[LLM MANAGER] LLMs initialized successfully.")
             print(f"""
             ###########################
             [Client Initialized]
-            Client:      {server}
-            Model:       {model}
+            Client:         {server}
+            Model:          {model}
+            Embed model:    {embed_model}
             ###########################
             """)
 
@@ -157,7 +165,8 @@ class LanguageModelManager:
         return {
             "llm": self.llm,
             "power_llm": self.power_llm,
-            "json_llm": self.json_llm
+            "json_llm": self.json_llm,
+            "embed_llm": self.embed_llm
         }
 
 
