@@ -1,6 +1,5 @@
 from langchain_core.messages import convert_to_messages
 
-
 def pretty_print_message(message, indent=False):
     pretty_message = message.pretty_repr(html=True)
     if not indent:
@@ -9,7 +8,6 @@ def pretty_print_message(message, indent=False):
 
     indented = "\n".join("\t" + c for c in pretty_message.split("\n"))
     print(indented)
-
 
 def pretty_print_messages(update, last_message=False):
     is_subgraph = False

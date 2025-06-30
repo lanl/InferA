@@ -6,9 +6,15 @@ output/*
 exports/*
 genericio/*
 cache/*
+state/state.pkl
+
+data_storage/*
+!data_storage/.placeholder
 
 src/data/JSON/*
 src/deprecated
+
+src/utils/config.py
 
 src/data/*.csv
 
@@ -20,3 +26,4 @@ genericio/*
 !src/data/JSON/.placeholder
 !logs
 !logs/.placeholder
+

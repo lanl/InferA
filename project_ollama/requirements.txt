@@ -27,6 +27,8 @@ numpy
 plotly
 typer
 tqdm
+dsi-workflow
+
 pytest
 pytest-cov
 pretty-repr

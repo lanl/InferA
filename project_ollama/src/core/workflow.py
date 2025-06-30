@@ -28,18 +28,27 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import ToolNode
 
 from src.core.state import State
+from src.langgraph_class.node_base import NodeBase
 from src.nodes import (
     dataloader_node, 
     human_feedback_node, 
     verifier_node, 
     planner_node, 
     supervisor_node,
-    retriever_node
+    retriever_node,
+    sql_node
 )
 
 from src.tools import (
     dataload_tools, 
     routing_tools
+)
+
+from langchain_community.tools.sql_database.tool import (
+    InfoSQLDatabaseTool,
+    ListSQLDatabaseTool,
+    QuerySQLCheckerTool,
+    QuerySQLDatabaseTool,
 )
 
 class WorkflowManager:
@@ -56,7 +65,6 @@ class WorkflowManager:
         self.memory = None
         self.graph = None
         self.config = {"configurable": {"thread_id": "1"}}
-        # self.members = ["toolcalling_agent"]
         self.tools = self.create_tools()
         self.agents = self.create_agents()
         self.setup_workflow()
@@ -66,6 +74,8 @@ class WorkflowManager:
         tools = {}
         tools["dataloader_tools"] = [dataload_tools.load_file_index]
         tools["routing_tools"] = [routing_tools.redirect]
+        tools["db_writer"] = [dataload_tools.load_to_db]
+        tools["sql_db_tools"] = [InfoSQLDatabaseTool, ListSQLDatabaseTool, QuerySQLCheckerTool, QuerySQLDatabaseTool]
 
         return tools
 
@@ -85,26 +95,45 @@ class WorkflowManager:
         agents["Verifier"] = verifier_node.Node(llm , self.tools["routing_tools"])
         agents["Supervisor"] = supervisor_node.Node(llm, self.tools["routing_tools"])
         agents["Retriever"] = retriever_node.Node(embed_llm)
+        agents["SQLProgrammer"] = sql_node.Node(llm, self.tools["db_writer"], self.tools["sql_db_tools"])
 
         return agents
-    
 
     def setup_workflow(self):
         self.workflow = StateGraph(State)
         """Setup langgraph graph as workflow"""
 
+        class EntryPoint(NodeBase):
+            def __init__(self):
+                super().__init__("EntryPoint")
+
+            def run(self, state):
+                return state
+
         # Add nodes
+        self.workflow.add_node("EntryPoint", EntryPoint())
         self.workflow.add_node("DataLoader", self.agents["DataLoader"])
+        self.workflow.add_node("Retriever", self.agents["Retriever"])
         self.workflow.add_node("HumanFeedback", self.agents["HumanFeedback"])
         self.workflow.add_node("Planner", self.agents["Planner"])
         self.workflow.add_node("Verifier", self.agents["Verifier"])
         self.workflow.add_node("Supervisor", self.agents["Supervisor"])
+        self.workflow.add_node("SQLProgrammer", self.agents["SQLProgrammer"])
 
         self.workflow.add_node("DataLoaderTool", ToolNode(self.tools["dataloader_tools"]))
         self.workflow.add_node("RoutingTool", ToolNode(self.tools["routing_tools"]))
+        self.workflow.add_node("DBWriter", ToolNode(self.tools["db_writer"]))
 
 
-        self.workflow.add_edge(START, "DataLoader")
+        # START is stateless. Use entrypoint to initialize start for initial routing: from previous state or stateless
+        self.workflow.add_edge(START, "EntryPoint")
+
+        self.workflow.add_conditional_edges(
+            "EntryPoint",
+            lambda x: x["next"],
+            {}
+        )
+
         self.workflow.add_conditional_edges(
             "DataLoader",
             lambda x: x['next'], 
@@ -130,11 +159,30 @@ class WorkflowManager:
             lambda x: x["next"],
             {
                 "HumanFeedback": "HumanFeedback",
-                "RoutingTool": "RoutingTool"
+                "RoutingTool": "RoutingTool",
+                "Supervisor": "Supervisor"
             }
         )
         self.workflow.add_edge("Supervisor", "RoutingTool")
 
+        self.workflow.add_conditional_edges(
+            "SQLProgrammer",
+            lambda x: x["next"],
+            {
+                "Retriever": "Retriever",
+                "DBWriter": "DBWriter",
+                "Supervisor": END
+            }
+        )
+
+        self.workflow.add_conditional_edges(
+            "DBWriter",
+            lambda x: x["messages"][-1].status,
+            {
+                "error": END,
+                "success": "SQLProgrammer"
+            }
+        )
 
         self.workflow.add_conditional_edges(
             "RoutingTool",
@@ -142,7 +190,7 @@ class WorkflowManager:
             {
                 "Planner": "Planner",
                 "Supervisor": "Supervisor",
-                "SQLProgrammer": END,
+                "SQLProgrammer": "SQLProgrammer",
                 "PythonProgrammer": END,
                 "Visualization": END
             }
@@ -154,6 +202,16 @@ class WorkflowManager:
                 "DataLoader": "DataLoader",
                 "Planner": "Planner",
                 "Verifier": "Verifier"
+            }
+        )
+
+        self.workflow.add_conditional_edges(
+            "Retriever",
+            lambda x: x["next"],
+            {
+                "SQLProgrammer": "SQLProgrammer",
+                "PythonProgrammer": END,
+                "Visualization": END
             }
         )
 

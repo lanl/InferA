@@ -38,17 +38,3 @@ class Node(NodeBase):
         else:
             logger.info(f"[DATALOADER] Tool called.")
             return {"messages": [response], "next": "DataLoaderTool", "current": "DataLoader"}
-
-        # if not response.tool_calls:
-        #     logger.info(f"[DATALOADER] No tools called. Routing to human feedback for more info.")
-        #     return {"messages": [response], "next": "HumanFeedback", "current": "DataLoader"}
-        # else:
-        #     tool_call = self.tool_node.invoke({"messages": [response]})
-        #     state["messages"].append(response)
-
-        #     if tool_call["messages"][0].content == "TimeStepError":
-        #         logger.info(f"[DATALOADER] load_file_index called. Error in timestep.")
-        #         return {"messages": [AIMessage("The timestep you provided is not in the data")], "next": "HumanFeedback", "current": "DataLoader"}
-        #     else:
-        #         logger.info(f"[DATALOADER] load_file_index successful.")
-        #         return {"messages": tool_call["messages"], "next": "Supervisor", "file_index": tool_call["messages"][0].content}

@@ -1,19 +1,33 @@
 import os
+import sys
 import re
 import json
 import logging
+
+import pandas as pd
+import numpy as np
+import duckdb
+from dsi.dsi import DSI
+
 from typing import List, Tuple, Dict, Annotated
 from collections import defaultdict
 from tqdm import tqdm
 
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import InjectedToolCallId, tool
-from langgraph.types import Command, interrupt
+from langgraph.types import Command
+from langgraph.prebuilt import InjectedState
+
+from src.core.state import State
+from src.utils.config import WORKING_DIRECTORY
+from src.utils.func_utils import time_function
+from src.utils.dataframe_utils import pretty_print_df
+
+genericio_path = "genericio/legacy_python/"
+sys.path.append(genericio_path)
+import genericio as gio
 
 logger = logging.getLogger(__name__)
-
-from src.utils.config import WORKING_DIRECTORY
-from src.utils.genericio_utils import load_gio_to_df
 
 # Ensure the working directory exists
 if not os.path.exists(WORKING_DIRECTORY):
@@ -35,31 +49,76 @@ def normalize_path(file_path: str) -> str:
         file_path = os.path.join(WORKING_DIRECTORY, file_path)
     return os.path.normpath(file_path)
 
-# @tool
-# def write_index_to_db(file_index: dict, db_path: Annotated[str, "Path to the db file"] = './db.duckdb') -> str:
-#     """
-#     Load all data files from the full file index
-    
-#     Args:
-#         index: Nested dictionary structured as index[sim_id][timestep][object] = path or list of paths.
-    
-#     Returns:
-#         dict: A dictionary of data frames organized by data[sim_id][timestep][object] = pd.dataframe
-#     """
-#     try:
-#         file_path = normalize_path(db_path)
-#         logger.info(f"[DATA LOAD TOOL] Creating db: {file_path}")
 
-#         data = {}
-#         for sim_id, ts_dict in file_index.items():
-#             for ts, object_dict in tqdm(ts_dict.items()):
-#                 for object, file_path in object_dict.items():
-#                     data[sim_id][ts][object] = load_gio_to_df(file_path)
-#         return data
-    
-#     except Exception as e:
-#         logger.error(f"Error while saving db: {str(e)}")
-#         return f"Error while saving db: {str(e)}"
+@tool(parse_docstring=True)
+def load_to_db(vars: list, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
+    """
+    Load selected variables from multiple simulation files into a DuckDB database.
+    This tool reads specific variables (`vars`) from multiple time-stepped simulation files,
+    enriches them with metadata (simulation ID, time step, object), and writes the combined 
+    data to a local DuckDB database file. Example: Call this tool to prepare and consolidate data for downstream querying.
+
+    Args:
+        vars: A list of variable names to extract from the data files.
+
+    Returns:
+        str: Path to the written database file for downstream querying.
+    """
+    file_index = state.get("file_index", None)
+    session_id = state.get("session_id", None)
+
+    if session_id:
+        DUCKDB_DIRECTORY = f"{WORKING_DIRECTORY}{session_id}.duckdb"
+    else:
+        DUCKDB_DIRECTORY = f"{WORKING_DIRECTORY}data.duckdb"
+
+    # Ensure output directory exists
+    os.makedirs(os.path.dirname(DUCKDB_DIRECTORY), exist_ok=True)
+    # Write to DuckDB file
+    con = duckdb.connect(DUCKDB_DIRECTORY)
+    logger.info(f"[load_to_db() TOOL] Connected to database: {DUCKDB_DIRECTORY}")
+
+    if not file_index:
+        raise Exception("FileIndexError")
+    table_initialized = False
+
+    logger.info(f"[load_to_db() TOOL] Writing file index to db:")
+    for sim in file_index:
+        for ts in file_index[sim]:
+            for obj, file_path in file_index[sim][ts].items():
+                data = gio.read(file_path, vars)
+
+                logger.info(f"      - File: {file_path}")
+                df = pd.DataFrame(np.column_stack(data), columns=vars)
+
+                # Add metadata
+                df["simulation"] = int(sim)
+                df["time_step"] = int(ts)
+                df["object"] = str(obj)
+
+                if not table_initialized:
+                    con.execute("CREATE OR REPLACE TABLE data AS SELECT * FROM df")
+                    table_initialized = True
+                else:
+                    con.execute("INSERT INTO data SELECT * FROM df")
+
+    columns = con.table("data").columns
+    df = con.sql("SELECT * FROM data").df()
+    print("Complete data:")
+    pretty_print_df(df, max_rows = 20)
+
+    con.close()
+    logger.info("[load_to_db() TOOL] Done writing to DB. Connection closed.")
+
+    return Command(update={
+        "db_path": DUCKDB_DIRECTORY,
+        "messages": [
+            ToolMessage(
+                f"Wrote all data to {DUCKDB_DIRECTORY}. TABLE = 'data', Columns = {columns} All dataframes concatenated via: full_df = pd.concat(all_dfs, ignore_index=True)",
+                tool_call_id=tool_call_id,
+            )
+        ]
+    })
 
 
 @tool(parse_docstring=True)
@@ -95,13 +154,13 @@ def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: A
     
     for i in sim_idx:
         sim_id = sim_ids[i]
-        result[sim_id] = {}
+        result[i] = {}
 
         if timestep == [-1]:  # All timesteps
             for ts, data in index[sim_id].items():
                 filtered = {obj: data[obj] for obj in object if obj in data}
                 if filtered:
-                    result[sim_id][ts] = filtered
+                    result[i][ts] = filtered
         else:  # Specific timesteps
             # Validate all timesteps first
             missing_timesteps = [ts for ts in timestep if ts not in index[sim_id]]
@@ -113,7 +172,7 @@ def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: A
                 data_at_ts = index[sim_id][ts]
                 filtered = {obj: data_at_ts[obj] for obj in object if obj in data_at_ts}
                 if filtered:
-                    result[sim_id][ts] = filtered
+                    result[i][ts] = filtered
                     
     return Command(update={
         "file_index": result,
@@ -150,8 +209,8 @@ def index_simulation_directories(root_paths: List[str], valid_object_types: set)
             sim_match = sim_pattern.search(dirpath)
             if not sim_match:
                 continue
-
-            sim_id = tuple(map(float, sim_match.groups()))
+            
+            sim_id = sim_match.group()
 
             for fname in filenames:
                 file_match = file_pattern.match(fname)
@@ -169,10 +228,18 @@ def index_simulation_directories(root_paths: List[str], valid_object_types: set)
 
     return index
 
+# @time_function
+# def load_db(data):
+#     db = DSI(f"{WORKING_DIRECTORY}/124.duckdb", backend_name="DuckDB")
+#     db.list()
+#     db.display("data", 10)
 
-# def main():
-#     index = load_file_index([0], [102], ["haloproperties"], 1)
-#     # write_index_to_db(index)
+def main():
+    # load_file_index([0], [498], ["haloproperties"])
+    load_to_db(["fof_halo_count", "fof_halo_tag", "fof_halo_mass"])
+    db = duckdb.connect(f"{WORKING_DIRECTORY}/data.duckdb")
+    db.sql("PRAGMA table_info('data')").show()
+    sql_df = db.sql("SELECT fof_halo_tag, fof_halo_mass, fof_halo_count, time_step FROM data WHERE simulation = 0 AND time_step IN (498, 105) ORDER BY time_step, fof_halo_mass DESC LIMIT 5;").df()
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()

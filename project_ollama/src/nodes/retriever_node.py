@@ -22,16 +22,19 @@ class Node(NodeBase):
 
 
     def run(self, state):
-        query = state["task"]
+        task = state["task"]
+        user_inputs = state["user_inputs"][0].content
+
+        query = f"User input: {user_inputs}\nTask: {task}"
         docs = self.retriever.invoke(query)
-        return {"messages": [AIMessage(f"Retrieved relevant documents for query: {query}")], "retrieved_docs": docs, "next": state["current"], "current": "Retriever"}
+        return {"messages": [AIMessage(f"Retrieved relevant documents for query: {query}. Docs retrieved: {len(docs)}.")], "retrieved_docs": docs, "next": state["current"], "current": "Retriever"}
 
 
     def _build_vector_store(self):
         with open(self.schema_path) as f:
             schema = json.load(f)
 
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=250, chunk_overlap=100)
         vector_store = InMemoryVectorStore(self.embedding_model)
 
         for section, fields in schema.items():

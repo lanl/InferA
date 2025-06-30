@@ -25,3 +25,8 @@ class State(TypedDict):
     task: str
     current_step: int
 
+    # retriever node
+    retrieved_docs: list
+
+    # sql node
+    db_path: str
