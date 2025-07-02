@@ -36,7 +36,9 @@ from src.nodes import (
     planner_node, 
     supervisor_node,
     retriever_node,
-    sql_node
+    sql_node,
+    QA_node,
+    python_node
 )
 
 from src.tools import (
@@ -73,8 +75,8 @@ class WorkflowManager:
     def create_tools(self):
         tools = {}
         tools["dataloader_tools"] = [dataload_tools.load_file_index]
-        tools["routing_tools"] = [routing_tools.redirect]
         tools["db_writer"] = [dataload_tools.load_to_db]
+        tools["routing_tools"] = [routing_tools.redirect]
         tools["sql_db_tools"] = [InfoSQLDatabaseTool, ListSQLDatabaseTool, QuerySQLCheckerTool, QuerySQLDatabaseTool]
 
         return tools
@@ -89,13 +91,17 @@ class WorkflowManager:
         # Dictionary of agents
         agents = {}
         # Create agents using different LLMs depending on their function
-        agents["DataLoader"] = dataloader_node.Node(llm, self.tools["dataloader_tools"])
         agents["HumanFeedback"] = human_feedback_node.Node()
+        agents["QA"] = QA_node.Node(power_llm)
+
         agents["Planner"] = planner_node.Node(power_llm)
         agents["Verifier"] = verifier_node.Node(llm , self.tools["routing_tools"])
         agents["Supervisor"] = supervisor_node.Node(llm, self.tools["routing_tools"])
+
+        agents["DataLoader"] = dataloader_node.Node(llm, self.tools["dataloader_tools"], self.tools["db_writer"])
         agents["Retriever"] = retriever_node.Node(embed_llm)
-        agents["SQLProgrammer"] = sql_node.Node(llm, self.tools["db_writer"], self.tools["sql_db_tools"])
+        agents["SQLProgrammer"] = sql_node.Node(llm)
+        agents["PythonProgrammer"] = python_node.Node(power_llm)
 
         return agents
 
@@ -111,14 +117,19 @@ class WorkflowManager:
                 return state
 
         # Add nodes
-        self.workflow.add_node("EntryPoint", EntryPoint())
-        self.workflow.add_node("DataLoader", self.agents["DataLoader"])
-        self.workflow.add_node("Retriever", self.agents["Retriever"])
+        self.workflow.add_node("EntryPoint", EntryPoint(), destinations=["Planner"])
         self.workflow.add_node("HumanFeedback", self.agents["HumanFeedback"])
+        self.workflow.add_node("QA", self.agents["QA"])
+
         self.workflow.add_node("Planner", self.agents["Planner"])
         self.workflow.add_node("Verifier", self.agents["Verifier"])
         self.workflow.add_node("Supervisor", self.agents["Supervisor"])
+
+        self.workflow.add_node("Retriever", self.agents["Retriever"])
+        self.workflow.add_node("DataLoader", self.agents["DataLoader"])
+
         self.workflow.add_node("SQLProgrammer", self.agents["SQLProgrammer"])
+        self.workflow.add_node("PythonProgrammer", self.agents["PythonProgrammer"])
 
         self.workflow.add_node("DataLoaderTool", ToolNode(self.tools["dataloader_tools"]))
         self.workflow.add_node("RoutingTool", ToolNode(self.tools["routing_tools"]))
@@ -134,24 +145,6 @@ class WorkflowManager:
             {}
         )
 
-        self.workflow.add_conditional_edges(
-            "DataLoader",
-            lambda x: x['next'], 
-            {
-                "HumanFeedback": "HumanFeedback", 
-                "DataLoaderTool": "DataLoaderTool"
-            }
-        )
-
-        self.workflow.add_conditional_edges(
-            "DataLoaderTool",
-            lambda x: x["messages"][-1].status,
-            {
-                "error": "HumanFeedback",
-                "success": "Planner"
-            }
-        )
-
         self.workflow.add_edge("Planner", "Verifier")
     
         self.workflow.add_conditional_edges(
@@ -163,15 +156,34 @@ class WorkflowManager:
                 "Supervisor": "Supervisor"
             }
         )
-        self.workflow.add_edge("Supervisor", "RoutingTool")
 
         self.workflow.add_conditional_edges(
-            "SQLProgrammer",
-            lambda x: x["next"],
+            "Supervisor",
+            lambda x: x['next'], 
             {
-                "Retriever": "Retriever",
+                "RoutingTool": "RoutingTool", 
+                "END": END
+            }
+        )
+        
+        self.workflow.add_conditional_edges(
+            "DataLoader",
+            lambda x: x['next'], 
+            {
+                "HumanFeedback": "HumanFeedback", 
+                "DataLoaderTool": "DataLoaderTool",
                 "DBWriter": "DBWriter",
-                "Supervisor": END
+                "Retriever": "Retriever",
+                "Supervisor": "Supervisor"
+            }
+        )
+
+        self.workflow.add_conditional_edges(
+            "DataLoaderTool",
+            lambda x: x["messages"][-1].status,
+            {
+                "error": "HumanFeedback",
+                "success": "DataLoader"
             }
         )
 
@@ -179,19 +191,30 @@ class WorkflowManager:
             "DBWriter",
             lambda x: x["messages"][-1].status,
             {
-                "error": END,
-                "success": "SQLProgrammer"
+                "error": "HumanFeedback",
+                "success": "DataLoader"
             }
         )
+
+        # self.workflow.add_conditional_edges(
+        #     "SQLProgrammer",
+        #     lambda x: x["next"],
+        #     {   
+        #         "QA": "QA"
+        #     }
+        # )
+        self.workflow.add_edge("SQLProgrammer", "QA")
+        self.workflow.add_edge("PythonProgrammer", END)
 
         self.workflow.add_conditional_edges(
             "RoutingTool",
             lambda x: x["next"],
             {
                 "Planner": "Planner",
+                "DataLoader": "DataLoader",
                 "Supervisor": "Supervisor",
                 "SQLProgrammer": "SQLProgrammer",
-                "PythonProgrammer": END,
+                "PythonProgrammer": "PythonProgrammer",
                 "Visualization": END
             }
         )
@@ -201,17 +224,27 @@ class WorkflowManager:
             {
                 "DataLoader": "DataLoader",
                 "Planner": "Planner",
-                "Verifier": "Verifier"
+                "Verifier": "Verifier",
+                "SQLProgrammer": "SQLProgrammer",
+            }
+        )
+
+        self.workflow.add_conditional_edges(
+            "QA",
+            lambda x: x["next"],
+            {   
+                "Supervisor": "Supervisor",
+                "SQLProgrammer": "SQLProgrammer",
+                "DataLoader": "DataLoader",
+                "PythonProgrammer": "PythonProgrammer"
             }
         )
 
         self.workflow.add_conditional_edges(
             "Retriever",
             lambda x: x["next"],
-            {
-                "SQLProgrammer": "SQLProgrammer",
-                "PythonProgrammer": END,
-                "Visualization": END
+            {   
+                "DataLoader": "DataLoader",
             }
         )
 

@@ -10,42 +10,83 @@ class Node(NodeBase):
     def __init__(self, llm, tools):
         super().__init__("Supervisor")
         self.llm = llm.bind_tools(tools)
-        self.system_prompt = (
-            "You are a supervisor for a data analysis project and an expert on cosmology simulations, with a specialization in data analysis using pandas dataframes and sql queries." \
-            "Your expertise is in delegating specific tasks to members of your team and reviewing their work to complete tasks related to large-scale cosmology simulation data analysis." \
-            "You provide a general task for the responsible team member that can be executed for the next member to pick up on. Once you have redirected to an agent, they will respond and you can redirect again to another agent." \
-            "" \
-            "Your team members are as follows:"
-            "- SQL Query programmer: This member filters data for large datasets. He is capable of identifying relevant columns and rows in the data and extracting only those information so that the large data is manageable. He is your go-to first agent so that the other data analysis members are not overwhelmed by large amounts of data."
-            "- Python programmer: This member is a world-class python programmer, and is able to perform complex analysis on the given data including algorithmic calculations."
-            "- Visualization expert: This member is able to take the filtered data from the python programmer and visualize it." \
-            "" \
-            "The simulation data is outlined as follows: "
-            "- simulation: Each simulation was performed with different initial conditions. The simulation directory contains timestep calculations for hundreds of timesteps." \
-            "- timestep: Each timestep is a folder containing cosmology particles from that simulated timestep." \
-            "- cosmology object files: Each file contains detailed coordinate and property information about various cosmology objects like dark matter halos, halo particles which form the halos, galaxies, and galaxy particles which form the galaxies." \
-            "" \
-            "If there is more context that you need from the user, directly ask the user for additional information that you need."
-            ""
-            "You have access to the redirect tool. You are given steps of a task - please redirect the step to the next appropriate team member, including their task."
-            "" \
-            "Redirect ONLY one of either 'SQLProgrammer','PythonProgrammer', or 'Visualization'." \
-            "If the task requires multiple basic functions, please break the task down into smaller pieces." \
-            "Respond with one sentence." \
-        )
+        self.system_prompt = """
+            As a supervisor for a data analysis project and an expert in cosmology simulations, your role is to coordinate a team of specialized agents to process and analyze large-scale cosmology simulation data using tools like pandas and SQL.
+
+            ### INSTRUCTIONS:
+            You are tasked with delegating specific, logically ordered tasks to team members. For each step, determine which agent should handle it next and describe their subtask clearly. Use the redirect tool to pass the task along. If additional information is needed before proceeding, redirect to HumanFeedback.
+
+            - Redirect ONLY one of the following per step: DataLoader, SQLProgrammer, PythonProgrammer, Visualization.  
+            - Use HumanFeedback ONLY to gather missing or ambiguous input.  
+            - Break complex workflows into small, sequential steps.  
+            - Respond with only one sentence per step that includes the redirection and subtask.
+
+            ### CONTEXT:
+            Your team members are:
+
+            - DataLoader: Loads required files from the simulation database and writes them to a shared database. Understands contents of files.
+            - SQLProgrammer: Extracts and filters relevant data to reduce dataset size and highlight useful columns/rows.
+            - PythonProgrammer: Conducts more complex calculations and algorithmic data analyses than SQLProgrammer using Python.
+            - Visualization: Creates clear, insightful visual representations of the analyzed data.
+            - HumanFeedback: Requests more information from the user if task details are unclear or missing.
+
+            ### SIMULATION STRUCTURE:
+            - simulation/: Root directory with simulations under varied initial conditions.
+            - timestep/: Contains data snapshots at each calculated timestep.
+            - cosmology object files: Hold spatial and property data on dark matter halos, galaxies, and their particles.
+
+            Use your judgment to direct the analysis process efficiently from raw data to visual insight.
+
+            ### PLAN:
+            {plan}
+
+            You are currently at step {current_step} of the plan.
+            """
+
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("system", self.system_prompt),
             ("user", "{message}")
         ])
 
         self.chain = self.prompt_template | self.llm
+
+        self.failed_template = ChatPromptTemplate.from_messages([
+            ("system", self.system_prompt),
+            ("user", "{message}"),
+            ("ai", "{failed_msg}")
+        ])
+
+        self.failed_chain = self.failed_template | self.llm
         
     
     def run(self, state):
         plan = state["plan"]
         steps = plan['steps']
-        current_step = state["current_step"]
-        # task to be sent to agents is updated in the tool along with the routing
-        response = self.chain.invoke({'message': steps[current_step]["description"]})
+        current_step = state.get("current_step", 0)
+        stashed_msg = state.get("stashed_msg", None)
+        qa_failed = state.get("qa_failed", False)
 
-        return {"messages": [response], "current": "Supervisor", "next": "RoutingTool", "current_step": current_step + 1}
+        if qa_failed:
+            current_step = current_step - 1
+            logger.info(f"[SUPERVISOR] Restarting last step: {current_step}...")
+
+            # Use failed_chain instead of chain
+            response = self.failed_chain.invoke({
+                'message': steps[current_step]["description"],
+                'failed_msg': stashed_msg,
+            })
+            current_step += 1
+            return {"messages": [response], "current": "Supervisor", "next": "RoutingTool", "current_step": current_step, "qa_failed": False}
+        
+        if current_step > len(steps) - 1:
+            return {"messages": [AIMessage("Completed analysis.")], "current": "Supervisor", "next": "END"}
+        
+        logger.info(f"[SUPERVISOR] Starting step {current_step}...\n    - TASK: {steps[current_step]["description"]}\n")
+        print(f"[SUPERVISOR] Starting step {current_step}...\n    - TASK: {steps[current_step]["description"]}\n")
+
+        # task to be sent to agents is updated in the tool along with the routing
+        response = self.chain.invoke({'message': steps[current_step]["description"], 'current_step': current_step, 'plan': plan})
+        print(response.tool_calls)
+
+        current_step += 1
+        return {"messages": [response], "current": "Supervisor", "next": "RoutingTool", "current_step": current_step}

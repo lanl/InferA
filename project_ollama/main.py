@@ -66,14 +66,25 @@ class MultiAgentSystem:
         state_dict = self.state_dict
         config = {"configurable": {"thread_id": self.session_id}}
 
-        if session_id not in state_dict:
+        if session_id not in state_dict or not session_id:
             state_dict[session_id] = {}
             state_dict[session_id]['session_id'] = session_id
             state_dict[session_id]['messages'] = [user_input]
             state_dict[session_id]['user_inputs'] = [user_input]
-            state_dict[session_id]['next'] = "DataLoader"
+            state_dict[session_id]['next'] = "Planner"
         else:
             self.logger.info(f"[SESSION] Starting previous session from node: {state_dict[session_id]['next']}")
+            for k, v in state_dict[session_id].items():
+                # Format the value nicely, you can customize this if v is complex
+                if k in ["messages", "stashed_msg", "retrieved_docs", "db_columns", "plan"]:
+                    continue
+                if isinstance(v, (dict, list)):
+                    import pprint
+                    formatted_value = pprint.pformat(v, indent=4)
+                else:
+                    formatted_value = str(v)
+                self.logger.info(f"  {k}: {formatted_value}")
+
 
         """Run multi-agent system with user input"""
         graph = self.workflow_manager.get_graph()
@@ -81,47 +92,48 @@ class MultiAgentSystem:
         try:
             with open("output/graph_output.png", "wb") as f:
                 f.write(graph.get_graph().draw_mermaid_png())
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.warning(e)
         
-        track_prev_prev_prev = None
-        track_prev_prev = None
-        track_prev = None
-        track_state = None
-        for k, v in graph.stream(
-            state_dict[session_id], config,
-            stream_mode = ["values", "updates"]
-        ):  
-            try:
-                if k == "updates":
-                    pretty_print_messages(v, last_message=True)
-                if k == "values":
-                    # track_prev is to track the state before the last step to rewind one node.
-                    track_prev_prev_prev = track_prev_prev
-                    track_prev_prev = track_prev
-                    track_prev = track_state
-                    track_state = v
-            except Exception as e:
-                self.logger.error(f"Unable to print message {k}:{v}. {e}")
+        track_state = []
+        max_history = 5
+
+        try:
+            for k, v in graph.stream(
+                state_dict[session_id], config,
+                stream_mode = ["values", "updates"]
+            ):  
+                try:
+                    if k == "updates":
+                        pretty_print_messages(v, last_message=True)
+                    if k == "values":
+                        track_state.append(v)
+                except Exception as e:
+                    self.logger.error(f"Unable to print message {k}:{v}. {e}")
+                    print(f"Unable to print message {k}:{v}. {e}")
+        except Exception as e:
+            self.logger.error(e)
+            print(e)    
 
 
-        state_dict[session_id] = track_prev_prev_prev
+        rewind_steps = 4
+        if len(track_state) >= rewind_steps + 1:
+            state_dict[session_id] = track_state[-(rewind_steps + 1)]
+        else:
+            # Not enough history to rewind that far, fallback to earliest or current
+            state_dict[session_id] = track_state[0] if track_state else None
 
         # # write to disk
         # with open(STATE_DICT_PATH, 'wb') as file:
         #     pickle.dump(state_dict, file)
         #     self.logger.info(f"[SESSION] State saved to {STATE_DICT_PATH} using session ID = {self.session_id}")
-        
-        # collect response
-        last_message = track_state['messages'][-1].content
-        
-        return last_message
 
 
 def main():
-    session_id = "123"
+    session_id = "134"
+    # session_id = None
     system = MultiAgentSystem(session_id = session_id)
-    user_input = "I want to find the largest friends-of-friends halo for timestep 498 in simulation 0."
+    user_input = "I want to compare the 5 largest friends-of-friends from timestep 498 and timestep 105 in simulation 0."
     system.run(user_input)
 
 

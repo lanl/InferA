@@ -51,21 +51,29 @@ def normalize_path(file_path: str) -> str:
 
 
 @tool(parse_docstring=True)
-def load_to_db(vars: list, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
+def load_to_db(columns: list, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
+# def load_to_db(columns: list):
     """
-    Load selected variables from multiple simulation files into a DuckDB database.
-    This tool reads specific variables (`vars`) from multiple time-stepped simulation files,
+    Load selected columns from multiple simulation files into a DuckDB database.
+    This tool reads specific columns from multiple time-stepped simulation files,
     enriches them with metadata (simulation ID, time step, object), and writes the combined 
     data to a local DuckDB database file. Example: Call this tool to prepare and consolidate data for downstream querying.
 
     Args:
-        vars: A list of variable names to extract from the data files.
+        columns: A list of column names to extract from the data files.
 
     Returns:
         str: Path to the written database file for downstream querying.
     """
     file_index = state.get("file_index", None)
     session_id = state.get("session_id", None)
+    # file_index = {0: {498: {'haloproperties': '/vast/projects/exasky/data/hacc/SCIDAC_RUNS/128MPC_RUNS_FLAMINGO_DESIGN_3B/FSN_0.5387_VEL_149.279_TEXP_9.613_BETA_0.8710_SEED_9.548e5/analysis/m000p-498.haloproperties'}}}
+    # session_id = None
+
+    if not isinstance(columns, list) or not columns:
+        raise ValueError("MissingColumnListError: You must provide a non-empty list of columns to extract.")
+    if not file_index:
+        raise ValueError("MissingFileIndexError: The file index is missing from state. Use the DataLoader to extract relevant files.")
 
     if session_id:
         DUCKDB_DIRECTORY = f"{WORKING_DIRECTORY}{session_id}.duckdb"
@@ -74,44 +82,57 @@ def load_to_db(vars: list, state: Annotated[dict, InjectedState], tool_call_id: 
 
     # Ensure output directory exists
     os.makedirs(os.path.dirname(DUCKDB_DIRECTORY), exist_ok=True)
-    # Write to DuckDB file
-    con = duckdb.connect(DUCKDB_DIRECTORY)
-    logger.info(f"[load_to_db() TOOL] Connected to database: {DUCKDB_DIRECTORY}")
 
-    if not file_index:
-        raise Exception("FileIndexError")
+    # Write to DuckDB file
+    try:
+        con = duckdb.connect(DUCKDB_DIRECTORY)
+    except Exception as e:
+        raise RuntimeError(f"DatabaseConnectionError: Could not connect to DuckDB at {DUCKDB_DIRECTORY}. Error: {e}")
+
+    logger.info(f"[load_to_db() TOOL] Connected to database: {DUCKDB_DIRECTORY}")
     table_initialized = False
 
     logger.info(f"[load_to_db() TOOL] Writing file index to db:")
     for sim in file_index:
         for ts in file_index[sim]:
             for obj, file_path in file_index[sim][ts].items():
-                data = gio.read(file_path, vars)
+                try:
+                    data = gio.read(file_path, columns)
+                except Exception as e:
+                    raise ValueError(
+                        f"ColumnReadError: Failed to read columns {columns} from {file_path}. Likely cause: missing or misspelled column names. Error: {e}"
+                    )
 
                 logger.info(f"      - File: {file_path}")
-                df = pd.DataFrame(np.column_stack(data), columns=vars)
+                df = pd.DataFrame(np.column_stack(data), columns=columns)
 
                 # Add metadata
                 df["simulation"] = int(sim)
                 df["time_step"] = int(ts)
-                df["object"] = str(obj)
+                df["object_type"] = str(obj)
 
-                if not table_initialized:
-                    con.execute("CREATE OR REPLACE TABLE data AS SELECT * FROM df")
-                    table_initialized = True
-                else:
-                    con.execute("INSERT INTO data SELECT * FROM df")
+                try:
+                    if not table_initialized:
+                        con.execute("CREATE OR REPLACE TABLE data AS SELECT * FROM df")
+                        table_initialized = True
+                    else:
+                        con.execute("INSERT INTO data SELECT * FROM df")
+                except Exception as e:
+                    raise RuntimeError(f"DatabaseWriteError: Failed writing to DuckDB from file {file_path}. Error: {e}")
 
-    columns = con.table("data").columns
-    df = con.sql("SELECT * FROM data").df()
-    print("Complete data:")
-    pretty_print_df(df, max_rows = 20)
+    try:
+        columns = con.table("data").columns
+        df = con.sql("SELECT * FROM data").df()
+    except Exception as e:
+        raise RuntimeError(f"DatabaseReadError: Failed to finalize or read from DuckDB. Error: {e}")
+    finally:
+        con.close()
 
-    con.close()
     logger.info("[load_to_db() TOOL] Done writing to DB. Connection closed.")
 
     return Command(update={
         "db_path": DUCKDB_DIRECTORY,
+        "db_columns" : columns,
         "messages": [
             ToolMessage(
                 f"Wrote all data to {DUCKDB_DIRECTORY}. TABLE = 'data', Columns = {columns} All dataframes concatenated via: full_df = pd.concat(all_dfs, ignore_index=True)",
@@ -176,6 +197,7 @@ def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: A
                     
     return Command(update={
         "file_index": result,
+        "object_type": object,
         "messages": [
             ToolMessage(
                 "Successfully loaded file index information",
@@ -237,9 +259,9 @@ def index_simulation_directories(root_paths: List[str], valid_object_types: set)
 def main():
     # load_file_index([0], [498], ["haloproperties"])
     load_to_db(["fof_halo_count", "fof_halo_tag", "fof_halo_mass"])
-    db = duckdb.connect(f"{WORKING_DIRECTORY}/data.duckdb")
-    db.sql("PRAGMA table_info('data')").show()
-    sql_df = db.sql("SELECT fof_halo_tag, fof_halo_mass, fof_halo_count, time_step FROM data WHERE simulation = 0 AND time_step IN (498, 105) ORDER BY time_step, fof_halo_mass DESC LIMIT 5;").df()
+    # db = duckdb.connect(f"{WORKING_DIRECTORY}/data.duckdb")
+    # db.sql("PRAGMA table_info('data')").show()
+    # sql_df = db.sql("SELECT fof_halo_tag, fof_halo_mass, fof_halo_count, time_step FROM data WHERE simulation = 0 AND time_step IN (498, 105) ORDER BY time_step, fof_halo_mass DESC LIMIT 5;").df()
 
 if __name__ == "__main__":
     main()

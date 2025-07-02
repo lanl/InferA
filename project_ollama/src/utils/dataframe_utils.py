@@ -32,7 +32,7 @@ def pretty_print_df(df: pd.DataFrame, max_rows: int = 50, tablefmt: str = 'fancy
     while estimate_col_widths(col_list) > term_width and len(col_list) > 1:
         col_list.pop()  # remove last column
 
-    df_final = df[col_list]
+    df_final = df_trimmed[col_list]
 
     # Tabulate and print
     print(tabulate(df_final, headers='keys', tablefmt=tablefmt, showindex=False))

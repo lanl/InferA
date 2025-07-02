@@ -7,7 +7,7 @@ load_dotenv()
 # Can choose to use LanlAI portal API or a local ollama model
 
 # LanlAI setup
-ENABLE_LANLAI = False # If true, switches model to use LanlAI API
+ENABLE_LANLAI = True # If true, switches model to use LanlAI API
 LANLAI_API_URL = "https://aiportal-api.stage.aws.lanl.gov/v2/serve"
 LANLAI_API_TOKEN = os.getenv("lanlAI_token")
 # LANLAI_MODEL_NAME = "meta.llama3-70b-instruct-v1:0"
@@ -15,7 +15,7 @@ LANLAI_API_TOKEN = os.getenv("lanlAI_token")
 LANLAI_MODEL_NAME = "anthropic.claude-3-5-sonnet-20240620-v1:0"
 PATH_TO_LANLCHAIN_PEM = "lanlchain.pem"
 
-ENABLE_OPENAI = True
+ENABLE_OPENAI = False
 OPENAI_API_KEY = os.getenv("OPENAI_KEY")
 OPENAI_MODEL_NAME = "gpt-4.1-mini"
 OPENAI_EMBED_MODEL_NAME = "text-embedding-3-large"
@@ -35,6 +35,8 @@ STATE_DICT_PATH = "./state/state.pkl"
 ENABLE_LOGGING = True
 ENABLE_DEBUG = False
 ENABLE_CONSOLE_LOGGING = True
+# ENABLE_CONSOLE_LOGGING = False
 
 # graph_builder.py configs - shortcut to skip user query and directly test later nodes
+# DISABLE_FEEDBACK = False
 DISABLE_FEEDBACK = True

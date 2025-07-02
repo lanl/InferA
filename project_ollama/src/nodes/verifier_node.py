@@ -40,7 +40,7 @@ class Node(NodeBase):
             logger.info(f"[VERIFIER] Human feedback disabled. Routing to supervisor node.")  
             return {"messages": [AIMessage("Skipping human feedback. Sending directly to supervisor.")], "next": "Supervisor", "current": "Verifier"}
         
-        elif previous_node in ['Planner']:
+        elif previous_node in ["Planner", "SQLProgrammer"]:
             logger.info(f"[VERIFIER] Routed directly from planner. Asking for human feedback first.")       
             return {"next": "HumanFeedback", "current": "Verifier", "messages": [AIMessage(f"\033[1m\033[31mAre you satisfied with the plan? If not, you may respond with changes you would like.\033[0m")]}
         

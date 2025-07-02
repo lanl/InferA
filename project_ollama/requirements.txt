@@ -10,6 +10,7 @@ langchain-ollama
 langchain-experimental
 langgraph
 langgraph-supervisor
+faiss-cpu
 
 requests
 pydantic

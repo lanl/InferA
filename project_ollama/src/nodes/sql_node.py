@@ -9,110 +9,127 @@ from langchain_core.output_parsers import JsonOutputParser
 # from langchain_community.utilities.sql_database import SQLDatabase
 
 from src.langgraph_class.node_base import NodeBase
+from src.utils.config import WORKING_DIRECTORY
 from src.utils.dataframe_utils import pretty_print_df
 
 logger = logging.getLogger(__name__)
 
 class Node(NodeBase):
-    def __init__(self, llm, db_writer, sql_tools):
+    def __init__(self, llm):
         super().__init__("SQL")
-        self.llm_load = llm.bind_tools(db_writer)
         self.llm_sql = llm
-
-        self.db_write_chain = self.load_to_db()
-        self.generate_sql_chain = self.generate_sql()
+        self.generate_sql = self._generate_sql()
     
     def run(self, state):
         # Based on user feedback, revise plan or continue to steps       
         task = state["task"]
-        last_message = state["messages"][-1]
-
-        file_index = state.get("file_index", None)
+        
         db_path = state.get("db_path", None)
-        # print("###############")
-        # db_path = "./data_storage/124.duckdb"
-        # print("./data_storage/124.duckdb")
+        object_type = state.get("object_type", None)
+        db_columns = state.get("db_columns", None)
 
-        retrieved_docs = state.get("retrieved_docs", None)
+        df_path = state.get("df_path", [])
+        df_index = state.get("df_index", 0)
 
-        if not retrieved_docs:
-            logger.info(f"[SQL PROGRAMMER] Column names not retrieved yet. Routing to retriever node.")       
-            return {"next": "Retriever", "current": "SQLProgrammer", "messages": [AIMessage("Retrieving relevant columns. Sending to retriever node.")]}
+        if not db_path:
+            logger.info(f"[SQL PROGRAMMER] Database has not been written. Routing back to supervisor.")       
+            return {"next": "Supervisor", 
+                    "current": "SQLProgrammer", 
+                    "messages": [AIMessage("Database is missing. Check with DataLoader to verify.")]
+                }
         
-        elif not db_path:
-            response = self.db_write_chain.invoke({"task": task, "context": retrieved_docs})
-            return {"next": "DBWriter", "current": "SQLProgrammer", "messages": [response]}
-        
-        else:
-            response = self.generate_sql_chain.invoke({"task": task, "last_message": last_message, "context": retrieved_docs})
+        try:
+            logger.info(f"[SQL PROGRAMMER] SQL Query inputs:\n   - TASK: {task}\n   - Columns: {db_columns}\n   - object_type: {object_type}\n")
+            response = self.generate_sql.invoke({"task": task, "columns": db_columns, "object_type": object_type})
+            sql_query = response['sql']
+            logger.info(f"[SQL PROGRAMMER] Generated SQL: {sql_query}")
+
+            # Execute SQL query
             db = duckdb.connect(db_path)
             sql_response = db.sql(response['sql']).df()
-            print("SQL Filtered data:")
-            pretty_print_df(sql_response)
             db.close()
-            return {"next": "Supervisor", "current": "SQLProgrammer", "messages": [AIMessage(f"SQL filtered data: {sql_response.info()}")]}
 
+            if sql_response.empty:
+                warning_msg = "SQL executed successfully but returned no rows. The query may be too restrictive or mismatched."
+                logger.warning(warning_msg)
+                diagnostic_msg = f"Columns: {db_columns}\n\n{warning_msg}\n\nSQL: {sql_query}"
+            elif len(sql_response) < 4:
+                note_msg = f"SQL query returned very few rows ({len(sql_response)}). Consider reviewing filter criteria."
+                logger.info(note_msg)
+                diagnostic_msg = f"Columns: {db_columns}\n\n{note_msg}\n\nSQL: {sql_query}\n\nPreview:\n{sql_response}"
+            else:
+                print("SQL Filtered data:")
+                pretty_print_df(sql_response)
+                
+                csv_output = f"{WORKING_DIRECTORY}{df_index}.csv"
+                sql_response.to_csv(csv_output, index= False)
+                df_path.append(csv_output)
+                df_index += 1
+                return {
+                    "next": "QA",
+                    "current": "SQLProgrammer",
+                    "messages": [AIMessage(f"SQL query:\n{sql_query}")],
+                    "stashed_msg": f"Columns: {db_columns}\n\nSQL query:\n{sql_query}",
+                    "df_path": df_path,
+                    "df_index": df_index
+                }
+            # If warning case, still send to QA with diagnostics
+            return {
+                "next": "QA",
+                "current": "SQLProgrammer",
+                "messages": [AIMessage(diagnostic_msg)],
+                "stashed_msg": diagnostic_msg
+            }
 
-    def load_to_db(self):
-        load_db_prompt = (
-            "You are given access to the load_to_db tool to write a database from a special file format, genericio, by extracting data from specific columns.\n\n"
-            "Task:\n"
-            "{task}\n\n"
-            "You are also given the following context listing all column names in the data. Use this context to select columns.\n"
-            "Context:\n"
-            "{context}\n\n"
-            "IMPORTANT:\n"
-            "- Only output the exact column names to extract, separated by commas or newlines.\n"
-            "- DO NOT include any explanations, extra text, or formatting.\n"
-            "- Only include column names that are relevant and exactly match those in the context.\n"
-            "- Do NOT output anything else besides the column names.\n"
-            "- Run the load_to_db tool once with the list of selected columns.\n"
-        )
-        prompt_template = PromptTemplate(
-            template = load_db_prompt,
-            input_variables=["task", "context"]
-        )
-        return prompt_template | self.llm_load
-    
+        except Exception as e:
+            error_msg = f"Columns: {db_columns}\n\n[SQL ERROR] {str(e)}"
+            logger.error(error_msg)
+            return {
+                "next": "QA",
+                "current": "SQLProgrammer",
+                "messages": [AIMessage(error_msg)],
+                "stashed_msg": error_msg
+            }
+        
 
-    def generate_sql(self):
+    def _generate_sql(self):
         sql_schema = ResponseSchema(name="sql", description="The SQL query to execute")
         output_parser = StructuredOutputParser.from_response_schemas([sql_schema])
         format_instructions = output_parser.get_format_instructions()
 
         system_prompt = (
-            "You are an agent designed to interact with a SQL database. You are one of several team members who all specialize in different tasks." \
-            "Given an input question, create a syntactically correct {dialect} query to run, then look at the results of the query and return the answer." \
-            "Unless the user specifies a specific number of examples they wish to obtain, always limit your query to at most {top_k} results." \
-            "Your job is to help other data analysis members not be overwhelmed by large amounts of data." \
-            "" \
-            "This is the full task:" \
-            "{task}" \
-            "" \
-            "The last team member just completed the following task:"
-            "{last_message}" \
-            "" \
-            "The simulation data is outlined as follows: "\
-            "- simulation: Each simulation was performed with different initial conditions. The simulation directory contains timestep calculations for hundreds of timesteps." \
-            "- timestep: Each timestep is a folder containing cosmology particles from that simulated timestep." \
-            "- cosmology object files: Each file contains detailed coordinate and property information about various cosmology objects like dark matter halos, halo particles which form the halos, galaxies, and galaxy particles which form the galaxies." \
-            "" \
-            "You can order the results by a relevant column to return the most interesting examples in the database." \
-            "Never query for all the columns from a specific table, only ask for the relevant columns given the question." \
-            "" \
-            "You MUST double check your query before executing it. If you get an error while executing a query, rewrite the query and try again." \
-            "DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database." \
-            "" \
-            "You are given the following context containing column names in the data, use this as context for which columns to load." \
-            "Context:" \
-            "{context}"
-            "" \
-            "Only generate a SQL query to complete the task." \
+            "You are a SQL generation agent for a cosmology simulation analysis pipeline. "
+            "Your job is to help filter large datasets into smaller, relevant subsets for downstream analysis. "
+            "You write SQL queries that extract only the essential data from the 'data' table, based on the task below.\n\n"
+
+            "Domain Knowledge:\n"
+            "- The simulation data includes: simulations (different initial conditions), timesteps (hundreds per simulation), and files for various cosmology objects.\n"
+            "- Object files include: dark matter halos, halo particles, galaxies, and galaxy particles, with coordinate and physical properties.\n\n"
+            "Task:"
+            "{task}"
+            ""
+            "Columns in Database:"
+            "{columns}"
+            "" 
+            "Object in object_type column:"
+            "{object_type}"
+            ""
+            "Instructions:\n"
+            "- Query only the 'data' table.\n"
+            "- Select only the columns that are relevant to the task.\n"
+            "- Never use SELECT * — be explicit about which columns to return.\n"
+            "- Limit results to the top {top_k} unless the task asks for more or fewer.\n"
+            "- Optionally ORDER BY a meaningful column (e.g., mass, velocity) to get significant examples.\n"
+            "- NEVER make data modifications (no INSERT, UPDATE, DELETE, DROP, etc.).\n"
+            "- Always ensure your SQL is valid {dialect} syntax.\n"
+            "- Only generate a SQL query — do not explain, comment, or return anything else.\n\n"
+
             "{format_instructions}"
         )
+
         prompt_template = PromptTemplate(
             template = system_prompt,
-            input_variables=["task", "last_message", "context"],
+            input_variables=["task", "columns"],
             partial_variables={"dialect": "PostgreSQL", "top_k": 5, "format_instructions": format_instructions},
         )
 

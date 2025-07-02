@@ -12,21 +12,33 @@ class State(TypedDict):
     current: str
     next: str
 
-    code: str
+    result: str
+
+    # supervisor node
+    task: str
+    current_step: int
+    
+    # store important msgs for specific error handling use
+    stashed_msg: str
 
     # dataloader node
     file_index: dict
+    object_type: list
+    db_path: str
+    db_columns: list
+
+    # retriever node
+    retrieved_docs: list
 
     # planner node
     plan: dict
     plan_verified: False
 
-    # supervisor node
-    task: str
-    current_step: int
+    # qa node
+    qa_retries: int
+    qa_failed: bool
 
-    # retriever node
-    retrieved_docs: list
+    # data analysis nodes
+    df_path: list
+    df_index: int
 
-    # sql node
-    db_path: str

@@ -13,7 +13,7 @@ def read_root():
 
 @app.post("/query/")
 async def query_agent(request: Request, pandas_code: str = Form(...), file: UploadFile = File(...)):
-    logger.info(f"[SANDBOX SERVER] Received pandas_code: {pandas_code}")
+    logger.info(f"[SANDBOX SERVER] Received pandas_code.")
     df = pd.read_csv(file.file)
     # Define the execution environment
     safe_globals = {
@@ -31,6 +31,7 @@ async def query_agent(request: Request, pandas_code: str = Form(...), file: Uplo
 
         # result = eval(pandas_code, {"df": df, "pd": pd})
         logger.info(f"[SANDBOX SERVER] Pandas code executed successfully on dataframe. Result type: {type(result)}")
+        print(result)
         
         # Convert the result to a JSON-serializable format
         if isinstance(result, pd.DataFrame):

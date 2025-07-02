@@ -17,6 +17,7 @@ src/deprecated
 src/utils/config.py
 
 src/data/*.csv
+src/data/vector_store
 
 genericio/*
 !genericio
