@@ -1,6 +1,7 @@
 import logging
 import duckdb
 import pandas as pd
+from typing import Dict
 
 from langchain_core.messages import AIMessage
 from langchain.prompts import PromptTemplate
@@ -8,11 +9,12 @@ from langchain.output_parsers.structured import ResponseSchema, StructuredOutput
 from langchain_core.output_parsers import JsonOutputParser
 
 from src.langgraph_class.node_base import NodeBase
+from src.utils.config import WORKING_DIRECTORY
 
 from src.llm.fastapi_client import query_dataframe_agent
 from src.utils.json_loader import extract_code_block
 
-from src.utils.dataframe_utils import pretty_print_df
+from src.utils.dataframe_utils import pretty_print_df, pretty_print_dict
 
 
 
@@ -33,38 +35,49 @@ class Node(NodeBase):
         db_columns = state.get("db_columns", None)
 
         # Get dataframes in state, primary way to use pandas data
-        df_path = state.get("df_path", [])
+        results_list = state.get("results_list", [])
         df_index = state.get("df_index", 0)
 
-        # if not df_path:
-        #     logger.info(f"[SQL PROGRAMMER] Database has not been written. Routing back to supervisor.")       
-        #     return {"next": "Supervisor", 
-        #             "current": "SQLProgrammer", 
-        #             "messages": [AIMessage("Database is missing. Check with DataLoader to verify.")]
-        #         }
-        df_list = []
-        try:
-            for path in df_path:
-                temp_df = pd.read_csv(path)
-                df_list.append(temp_df)
-            df = pd.concat(df_list)
-            logger.info(f"[PYTHON PROGRAMMER] Loaded and concatenated all dataframes to df.")
-            pretty_print_df(df)
+        if not results_list:
+            logger.info(f"[PYTHON PROGRAMMER] No dataframes from previous steps. Getting dataframe from db.")       
+            db = duckdb.connect(db_path)
+            df = db.execute("SELECT * FROM data").fetchdf()
 
-        except Exception as e:
-            error_msg = f"[PYTHON PROGRAMMER] Failed to load CSV: {str(e)}"
-            logger.error(error_msg)
-            return {
-                "next": "QA",
-                "current": "PythonProgrammer",
-                "messages": [AIMessage(error_msg)],
-                "stashed_msg": error_msg
-            }
+        else:
+            try:
+                df_list = []
+                explanations = ""
+                for result in results_list:
+                    path = result[0]
+                    explanations = explanations + "\n" + result[1]
+                    if path.endswith(".csv"):
+                        temp_df = pd.read_csv(path)
+                        df_list.append(temp_df)
+                df = pd.concat(df_list)
+                logger.info(f"[PYTHON PROGRAMMER] Loaded and concatenated all dataframes to df.")
+                pretty_print_df(df)
+
+            except Exception as e:
+                error_msg = f"[PYTHON PROGRAMMER] Failed to load CSV: {str(e)}"
+                logger.error(error_msg)
+                return {
+                    "next": "QA",
+                    "current": "PythonProgrammer",
+                    "messages": [AIMessage(error_msg)],
+                    "stashed_msg": error_msg,
+                }
         
         logger.info(f"[PYTHON PROGRAMMER] Task: {task}")
         try:
             columns = list(df.columns)
-            response = self.generate_pandas.invoke({"task": task, "columns": columns})
+            response = self.generate_pandas.invoke({
+                "task": task, 
+                "columns": columns,
+                "df_head": df.head(),
+                "df_describe": df.describe(),
+                "explanations": explanations,
+                "df_types": df.types
+            })
 
             unfiltered_code = response["pandas_code"]
             pandas_code = extract_code_block(unfiltered_code)
@@ -74,7 +87,8 @@ class Node(NodeBase):
             print(f"Explanation:\n{explanation}\n\n")
 
             if not pandas_code.startswith("python"):
-                raise ValueError("Generated code does not start with 'df', refusing to execute for safety.")
+                # raise ValueError("Generated code does not start with 'python', refusing to execute for safety.")
+                pass
             else:
                 pandas_code = pandas_code[len("python"):].strip()
             
@@ -83,37 +97,43 @@ class Node(NodeBase):
                 result = query_dataframe_agent(df, pandas_code)
             except Exception as e:
                 logger.error(f"Execution error: {e}")
+                return {
+                    "next": "QA",
+                    "current": "PythonProgrammer",
+                    "messages": [AIMessage(e)],
+                    "stashed_msg": e
+                }
 
 
             if isinstance(result, pd.DataFrame):
-                pretty_print_df(result)
+                pp_df = pretty_print_df(result, return_output = True)
                 # Save filtered dataframe to new CSV
-                output_csv = f"{df_index}.csv"
-                result.to_csv(output_csv, index=False)
-                df_path.append(output_csv)
+                return_result = f"{WORKING_DIRECTORY}{df_index}.csv"
+
+                logger.info(f"\033[1;33m[PYTHON PROGRAMMER] Writing dataframe result to {return_result}.\033[0m")
+                result.to_csv(return_result, index=False)
+                
                 df_index += 1
-                return {
-                    "next": "QA",
-                    "current": "PythonProgrammer",
-                    "messages": [AIMessage(f"Pandas code executed successfully.\nCode:\n{pandas_code}")],
-                    "stashed_msg": f"Pandas code:\n{pandas_code}",
-                    "df_path": df_path,
-                    "df_index": df_index,
-                    "result": output_csv
-                }
-            else:
-                # If result is scalar or other type, just return as message
-                return {
-                    "next": "QA",
-                    "current": "PythonProgrammer",
-                    "messages": [AIMessage(f"Result:\n{result}")],
-                    "stashed_msg": f"Result:\n{result}",
-                    "result": result
-                }
+                results_list.append((return_result, explanation))
+
+            elif isinstance(result, Dict):
+                pp_df = pretty_print_dict(result, return_output = True)
+                return_result = result
+                
+                df_index += 1
+                results_list.append((f"python_{df_index}", return_result))
+            
+            return {
+                "next": "QA",
+                "current": "PythonProgrammer",
+                "messages": [AIMessage(f"Pandas code executed successfully.\n\n{pp_df}")],
+                "stashed_msg": f"Pandas code:\n{pandas_code}",
+                "results_list": results_list,
+                "df_index": df_index,
+            }
 
         except Exception as e:
-            error_msg = f"[PYTHON PROGRAMMER] Error executing pandas code: {str(e)}"
-            # logger.error(error_msg)
+            error_msg = f"❌ \033[1;31m[PYTHON PROGRAMMER] Error executing pandas code: {str(e)}\033[0m"
             return {
                 "next": "QA",
                 "current": "PythonProgrammer",
@@ -126,7 +146,7 @@ class Node(NodeBase):
         pandas_schema = [
             ResponseSchema(
                 name="pandas_code", 
-                description="Python code using pandas to process or analyze the input DataFrame, df."
+                description="Python code using pandas to process or analyze the input DataFrame, input_df."
             ),
             ResponseSchema(
                 name="explanation", 
@@ -139,21 +159,45 @@ class Node(NodeBase):
             """
             You are a code generator that transforms a pandas DataFrame named `input_df` based on user instructions. 
 
-            Requirements:
-            - Only use pandas and numpy. 
-            - If the rest of the dataset is not relevant to the user's query, only return the relevant columns or rows.
-            - Do not import any libraries, including pandas or numpy.
-            - Do not use loops, file I/O, or print statements.
-            - Assign the final result to a new DataFrame named `result_df`.
-            - You should think through the steps for how to best answer the question before generating code.
-            - Return only the code, inside a single Python code block (```python ...```).
-            - The following context contains column names in 'input_df', use this as context for which columns to transform.
+            ***STRICT RULES (Always Follow These):***
+            - ❌ NEVER import any libraries (no `import pandas`, `import numpy`, etc.).
+            - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
+            - ✅ ALWAYS assign the final result to a single DataFrame named `result_df`.
+            - ❌ NEVER use loops, file I/O, or print statements.
+            - ✅ Use only pandas and numpy operations.
+            - ✅ If the user’s task applies to only part of the DataFrame, return just the relevant rows or columns.
+
+            ***Incorrect example (Do NOT do this):***
+            ``` # Must add python code block
+            import pandas as pd # Do not import libraries
             
-            Columns in dataframe:
+            result_df = ...
+            ```
+
+            First, think step-by-step about how to perform the task using pandas/numpy.
+            Then, return only the final code inside a Python code block.
+
+            **Task:** 
+            {task}
+
+            **Columns in dataframe:**
             {columns}
 
-            Task: 
-            {task}
+            **DataFrame (first few rows):**
+            ```
+            {df_head}
+            ```
+
+            **DataFrame Statistical Summary (`df.describe()`):**
+            ```
+            {df_describe}
+            ```
+
+            **DataFrame types:**
+            {df_types}
+
+            **Previous steps from previous steps in the analysis pipeline:**
+            {explanations}
 
             {format_instructions}
 
@@ -163,7 +207,7 @@ class Node(NodeBase):
         
         prompt_template = PromptTemplate(
             template=system_prompt,
-            input_variables=["task", "columns"],
+            input_variables=["task", "columns", "df_head", "df_describe", "explanations", "df_types"],
             partial_variables={"format_instructions": output_parser.get_format_instructions()}
         )
         return prompt_template | self.llm | output_parser

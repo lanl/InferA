@@ -13,10 +13,11 @@ from src.langgraph_class.node_base import NodeBase
 logger = logging.getLogger(__name__)
 
 class Node(NodeBase):
-    def __init__(self, embedding_model, schema_path="src/data/JSON/data_variables.json", vector_store_path = "src/data/vector_store"):
+    def __init__(self, embedding_model, server, schema_path="src/data/JSON/data_variables.json", vector_store_path = "src/data/vector_store"):
         super().__init__("Retriever")
         logger.info("[RETRIEVER] Setting up embedded model...")
         self.embedding_model = embedding_model
+        self.server = server
         self.schema_path = schema_path
         self.vector_store_path = vector_store_path
 
@@ -33,6 +34,8 @@ class Node(NodeBase):
 
 
     def run(self, state):
+        self.check_compatible_embedding(state)
+
         task = state["task"]
         user_inputs = state["user_inputs"][0].content
         object_type = state.get("object_type", None)
@@ -47,7 +50,7 @@ class Node(NodeBase):
         else:
             all_docs = self.retriever.invoke(query)
 
-        return {"messages": [AIMessage(f"Retrieved {len(all_docs)} relevant documents. {query}.")], "retrieved_docs": all_docs, "next": state["current"], "current": "Retriever"}
+        return {"messages": [AIMessage(f"Retrieved {len(all_docs)} relevant documents. {query}.")], "retrieved_docs": all_docs, "next": state["current"], "current": "Retriever", "server": self.server}
 
 
     def _build_vector_store(self):
@@ -63,7 +66,7 @@ class Node(NodeBase):
                 Document(page_content=rag_text, metadata={"object_type": section})
             ])
             all_docs.extend(docs)
-
+        
         return FAISS.from_documents(all_docs, self.embedding_model)
 
     def _generate_rag_text(self, fields):
@@ -71,3 +74,13 @@ class Node(NodeBase):
             f"Field: {field}\n - Description: {props['description']}\n"
             for field, props in fields.items()
         )
+    
+    def check_compatible_embedding(self, state):
+        prev_server = state.get("server", None)
+        if prev_server and prev_server != self.server:
+            logger.info("❌ \033[1;31mPrevious server is not the same as current server. Loaded FAISS model may not be correct. Rebuilding FAISS model.\033[0m")
+            os.rmdir(self.vector_store_path)
+            self.vector_store = self._build_vector_store()
+            self.vector_store.save_local(self.vector_store_path)
+        else:
+            logger.info("✅ \033[1;32mChecked FAISS model compatibility.\033[0m")

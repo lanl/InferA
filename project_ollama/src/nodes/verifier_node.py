@@ -3,7 +3,6 @@ from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.langgraph_class.node_base import NodeBase
-from src.utils.config import DISABLE_FEEDBACK
 
 logger = logging.getLogger(__name__)
 
@@ -36,31 +35,11 @@ class Node(NodeBase):
         if previous_node == None:
             return {'next': 'Planner'}
         
-        elif DISABLE_FEEDBACK:
-            logger.info(f"[VERIFIER] Human feedback disabled. Routing to supervisor node.")  
-            return {"messages": [AIMessage("Skipping human feedback. Sending directly to supervisor.")], "next": "Supervisor", "current": "Verifier"}
-        
-        elif previous_node in ["Planner", "SQLProgrammer"]:
+        elif previous_node in ["Planner", "SQLProgrammer", "PythonProgrammer"]:
             logger.info(f"[VERIFIER] Routed directly from planner. Asking for human feedback first.")       
-            return {"next": "HumanFeedback", "current": "Verifier", "messages": [AIMessage(f"\033[1m\033[31mAre you satisfied with the plan? If not, you may respond with changes you would like.\033[0m")]}
+            return {"next": "HumanFeedback", "current": "Verifier", "messages": [AIMessage(f"\033[1;35mAre you satisfied with the plan? If not, you may respond with changes you would like.\033[0m")]}
         
         elif previous_node in ['HumanFeedback']:
             logger.info(f"[VERIFIER] Routed from human feedback. Check if feedback is positive or negative.")       
             response = self.pos_feedback_chain.invoke({'message':last_message})
             return {"messages": [response], "next": "RoutingTool", "current": "Verifier"}
-
-            # if pos_feedback_indicator == 'n':
-            #     return {'next': 'Planner', "messages": [AIMessage(f"User is not satisfied with the plan. Revising...")]}
-            # else:
-            #     return {'next': 'RedirectTool', "messages": [AIMessage(f"User is satisfied with the plan. Executing next steps...")]}
-        # elif previous_node == 'Execute':
-        #     pos_feedback_indicator = self.get_pos_feedback_indicator(state)
-
-        #     if pos_feedback_indicator == 'n':
-        #         return {'next': 'Revise'}
-        #     else:
-        #         return {'next': 'Memorize'}
-        # elif previous_node == 'Memorize':
-        #     return {"messages": [AIMessage(content="Please initialize a new session for a new task")], 
-        #             "next": "END"
-        #         }

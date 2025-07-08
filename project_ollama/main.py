@@ -64,7 +64,7 @@ class MultiAgentSystem:
     def run(self, user_input: str) -> None:
         session_id = self.session_id
         state_dict = self.state_dict
-        config = {"configurable": {"thread_id": self.session_id}}
+        config = {"configurable": {"thread_id": self.session_id}, "recursion_limit": 50}
 
         if session_id not in state_dict or not session_id:
             state_dict[session_id] = {}
@@ -76,7 +76,7 @@ class MultiAgentSystem:
             self.logger.info(f"[SESSION] Starting previous session from node: {state_dict[session_id]['next']}")
             for k, v in state_dict[session_id].items():
                 # Format the value nicely, you can customize this if v is complex
-                if k in ["messages", "stashed_msg", "retrieved_docs", "db_columns", "plan"]:
+                if k in ["messages", "stashed_msg", "retrieved_docs", "db_columns"]:
                     continue
                 if isinstance(v, (dict, list)):
                     import pprint
@@ -116,7 +116,7 @@ class MultiAgentSystem:
             print(e)    
 
 
-        rewind_steps = 4
+        rewind_steps = 3
         if len(track_state) >= rewind_steps + 1:
             state_dict[session_id] = track_state[-(rewind_steps + 1)]
         else:
@@ -130,10 +130,14 @@ class MultiAgentSystem:
 
 
 def main():
-    session_id = "134"
+    session_id = "138"
     # session_id = None
     system = MultiAgentSystem(session_id = session_id)
-    user_input = "I want to compare the 5 largest friends-of-friends from timestep 498 and timestep 105 in simulation 0."
+    # user_input = "Can you show me the change in mass of the largest friends-of-friends halos for all timesteps in simulation 0?"
+    user_input = "What is the most important data point in the dataset?"
+    # user_input = "Can you find me the largest friends-of-friends halo from timestep 498 in simulation 0?"
+    # user_input = "Find me the 10 friends-of-friends halos closest in coordinates to the halo with fof_halo_tag = '251375070' in timestep 498 of simulation 0. Use columns 'fof_halo_center_x', 'fof_halo_center_y', 'fof_halo_center_z'."
+    # user_input = "Can you map out the largest friends-of-friends halos for all timesteps in simulation 0? For visualization, instead of going to visualization agent, just have the python programmer provide code to visualize."
     system.run(user_input)
 
 

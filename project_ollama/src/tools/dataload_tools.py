@@ -91,34 +91,45 @@ def load_to_db(columns: list, state: Annotated[dict, InjectedState], tool_call_i
 
     logger.info(f"[load_to_db() TOOL] Connected to database: {DUCKDB_DIRECTORY}")
     table_initialized = False
+    
+    total_files = sum(len(file_index[sim][ts]) for sim in file_index for ts in file_index[sim])
+    logger.info(f"[load_to_db() TOOL] Writing file index to db. Total files to write: {total_files}")
 
-    logger.info(f"[load_to_db() TOOL] Writing file index to db:")
-    for sim in file_index:
-        for ts in file_index[sim]:
-            for obj, file_path in file_index[sim][ts].items():
-                try:
-                    data = gio.read(file_path, columns)
-                except Exception as e:
-                    raise ValueError(
-                        f"ColumnReadError: Failed to read columns {columns} from {file_path}. Likely cause: missing or misspelled column names. Error: {e}"
-                    )
+    all_files = [
+        (sim, ts, obj, file_path)
+        for sim in file_index
+        for ts in file_index[sim]
+        for obj, file_path in file_index[sim][ts].items()
+    ]
 
-                logger.info(f"      - File: {file_path}")
-                df = pd.DataFrame(np.column_stack(data), columns=columns)
+    iterator = tqdm(all_files, desc= "Loading files") if total_files > 10 else all_files
 
-                # Add metadata
-                df["simulation"] = int(sim)
-                df["time_step"] = int(ts)
-                df["object_type"] = str(obj)
+    for sim, ts, obj, file_path in iterator:
+        try:
+            data = gio.read(file_path, columns)
+        except Exception as e:
+            raise ValueError(
+                f"ColumnReadError: Failed to read columns {columns} from {file_path}. Likely cause: missing or misspelled column names. Error: {e}"
+            )
+        
+        if total_files <= 10:
+            logger.info(f"\n- File: {file_path}")
 
-                try:
-                    if not table_initialized:
-                        con.execute("CREATE OR REPLACE TABLE data AS SELECT * FROM df")
-                        table_initialized = True
-                    else:
-                        con.execute("INSERT INTO data SELECT * FROM df")
-                except Exception as e:
-                    raise RuntimeError(f"DatabaseWriteError: Failed writing to DuckDB from file {file_path}. Error: {e}")
+        df = pd.DataFrame(np.column_stack(data), columns=columns)
+
+        # Add metadata
+        df["simulation"] = int(sim)
+        df["time_step"] = int(ts)
+        df["object_type"] = str(obj)
+
+        try:
+            if not table_initialized:
+                con.execute("CREATE OR REPLACE TABLE data AS SELECT * FROM df")
+                table_initialized = True
+            else:
+                con.execute("INSERT INTO data SELECT * FROM df")
+        except Exception as e:
+            raise RuntimeError(f"DatabaseWriteError: Failed writing to DuckDB from file {file_path}. Error: {e}")
 
     try:
         columns = con.table("data").columns
@@ -154,8 +165,10 @@ def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: A
     Returns:
         dict: Nested dictionary index of all relevant files
     """
-    root_paths = ["/vast/projects/exasky/data/hacc/SCIDAC_RUNS/128MPC_RUNS_FLAMINGO_DESIGN_3B", "/vast/projects/exasky/data/hacc/SCIDAC_RUNS/128MPC_RUNS_FLAMINGO_DESIGN_3A"]
-    
+    root_paths = ["/vast/projects/exasky/data/hacc/SCIDAC_RUNS/128MPC_RUNS_FLAMINGO_DESIGN_3B", "/vast/projects/exasky/data/hacc/SCIDAC_RUNS/128MPC_RUNS_FLAMINGO_DESIGN_3A", "/vast/projects/libra/scidac_data/128MPC_RUNS_FLAMNGO_DESIGN_3A", "/vast/projects/libra/scidac_data/128MPC_RUNS_FLAMNGO_DESIGN_3B"]
+    for idx, path in enumerate(root_paths):
+        logger.info(f"Simulation {idx}: {path}")
+
     with open("src/data/file_descriptions.json", "r") as file:
         valid_object_types = json.load(file).keys()
 

@@ -38,13 +38,16 @@ class Node(NodeBase):
             "### RESPONSE FORMAT:\n"
             "- If revisions are required, your entire response must be the new task string only, incorporating clear, actionable feedback.\n"
             "- Include the numeric grade between 1 and 100 that reflects how well the output fulfills the task requirements.\n"
-            "- Do NOT include any explanations, commentary, or extraneous text outside the prescribed response.\n\n"
+            "- Do NOT include any explanations, commentary, or extraneous text outside the prescribed response.\n"
+            "- If code was given to you, respond with the code and changes to that code that are needed.\n"
 
             "---\n"
             "### CONTEXT TO REVIEW:\n"
             "Task assigned:\n'''{message}'''\n\n"
             "Agent who completed the task: {member}\n\n"
             "Agent's last output:\n'''{stashed_msg}'''\n\n"
+            "{member}'s requirements\n"
+            "{requirements}"
             "---"
             "Respond only with JSON."
         )
@@ -67,11 +70,34 @@ class Node(NodeBase):
         max_retries = 1
         threshold = 50
 
+        requirements = ""
+        if previous_node == "SQLProgrammer":
+            requirements = '''
+                "- Query only the 'data' table.\n"
+                "- Select only the columns that are relevant to the task.\n"
+                "- Never use SELECT * — be explicit about which columns to return.\n"
+                "- Optionally ORDER BY a meaningful column (e.g., mass, velocity) to get significant examples.\n"
+                "- NEVER make data modifications (no INSERT, UPDATE, DELETE, DROP, etc.).\n"
+                "- Always ensure your SQL is valid {dialect} syntax.\n"
+                "- Only generate a SQL query — do not explain, comment, or return anything else.\n\n"
+                '''
+        if previous_node == "PythonProgrammer":
+            requirements = '''
+                ***STRICT RULES (Always Follow These):***
+                - ❌ NEVER import any libraries (no `import pandas`, `import numpy`, etc.).
+                - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
+                - ✅ ALWAYS assign the final result to a single DataFrame named `result_df`.
+                - ❌ NEVER use loops, file I/O, or print statements.
+                - ✅ Use only pandas and numpy operations.
+                - ✅ If the user’s task applies to only part of the DataFrame, return just the relevant rows or columns.
+            '''
+
         response = self.chain.invoke({
             'message': task, 
             'member': previous_node, 
             'stashed_msg': stashed_msg, 
-            "threshold": threshold
+            "threshold": threshold,
+            "requirements": requirements
         })
 
         try:
@@ -86,7 +112,7 @@ class Node(NodeBase):
             qa_retries += 1
             if qa_retries > max_retries:
                 return {
-                    "messages": [{"role": "assistant", "content": f"Maximum QA retries reached with score {score}. Escalating to Supervisor."}],
+                    "messages": [{"role": "assistant", "content": f"❌ \033[1;31mMaximum QA retries reached with score {score}. Escalating to Supervisor.\033[0m"}],
                     "task": revised_task,
                     "next": "Supervisor",
                     "qa_retries": 0,
@@ -94,14 +120,14 @@ class Node(NodeBase):
                 }
 
             return {
-                "messages": [{"role": "assistant", "content": f"Output failed with a score of {score}. Routing back to {previous_node} with updated task:\n{revised_task}"}], 
+                "messages": [{"role": "assistant", "content": f"⚠️ \033[1;31mOutput failed with a score of {score}. Routing back to {previous_node} with updated task:\n{revised_task}\033[0m"}], 
                 "task": revised_task, 
                 "next": previous_node,
                 "qa_retries" : qa_retries
             }
         else:
             return {
-                "messages": [{"role": "assistant", "content": f"Output passed with a score of {score}. Routing to Supervisor to begin next task."}], 
+                "messages": [{"role": "assistant", "content": f"✅ \033[1;32mOutput passed with a score of {score}. Routing to Supervisor to begin next task.\033[0m"}], 
                 "next": "Supervisor",
                 "qa_retries": 0
             }

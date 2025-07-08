@@ -29,6 +29,7 @@ class Node(NodeBase):
             - PythonProgrammer: Conducts more complex calculations and algorithmic data analyses than SQLProgrammer using Python.
             - Visualization: Creates clear, insightful visual representations of the analyzed data.
             - HumanFeedback: Requests more information from the user if task details are unclear or missing.
+            - Summary: Summarizes results at the end of the task.
 
             ### SIMULATION STRUCTURE:
             - simulation/: Root directory with simulations under varied initial conditions.
@@ -62,7 +63,7 @@ class Node(NodeBase):
     def run(self, state):
         plan = state["plan"]
         steps = plan['steps']
-        current_step = state.get("current_step", 0)
+        current_step = state.get("current_step", 1)
         stashed_msg = state.get("stashed_msg", None)
         qa_failed = state.get("qa_failed", False)
 
@@ -72,21 +73,22 @@ class Node(NodeBase):
 
             # Use failed_chain instead of chain
             response = self.failed_chain.invoke({
-                'message': steps[current_step]["description"],
+                'message': steps[current_step-1]["description"],
                 'failed_msg': stashed_msg,
+                'current_step': current_step,
+                'plan': plan
             })
             current_step += 1
             return {"messages": [response], "current": "Supervisor", "next": "RoutingTool", "current_step": current_step, "qa_failed": False}
         
-        if current_step > len(steps) - 1:
+        if current_step > len(steps):
             return {"messages": [AIMessage("Completed analysis.")], "current": "Supervisor", "next": "END"}
         
-        logger.info(f"[SUPERVISOR] Starting step {current_step}...\n    - TASK: {steps[current_step]["description"]}\n")
-        print(f"[SUPERVISOR] Starting step {current_step}...\n    - TASK: {steps[current_step]["description"]}\n")
+        logger.info(f"[SUPERVISOR] Starting step {current_step}...\n    - TASK: {steps[current_step-1]["description"]}\n")
+        print(f"\033[1;36m[SUPERVISOR] Starting step {current_step}...\n    - TASK: {steps[current_step-1]["description"]}\n\033[0m")
 
         # task to be sent to agents is updated in the tool along with the routing
-        response = self.chain.invoke({'message': steps[current_step]["description"], 'current_step': current_step, 'plan': plan})
-        print(response.tool_calls)
+        response = self.chain.invoke({'message': steps[current_step-1]["description"], 'current_step': current_step, 'plan': plan})
 
         current_step += 1
         return {"messages": [response], "current": "Supervisor", "next": "RoutingTool", "current_step": current_step}

@@ -8,12 +8,12 @@ class NodeBase:
         self.logger = logger
 
     def __call__(self, state):
-        self.logger.info(f"\033[1m\033[31m[{self.name.upper()}] Starting node...\033[0m")
+        self.logger.info(f"\033[1;34m[{self.name.upper()}] Starting node...\033[0m")
         self.logger.debug(f"[{self.name.upper()}] Input state: {state}")
 
         result = self.run(state)
 
-        self.logger.info(f"\033[1m\033[31m[{self.name.upper()}] Finished node.\033[0m")
+        self.logger.info(f"\033[1;34m[{self.name.upper()}] Finished node.\033[0m")
         self.logger.debug(f"[{self.name.upper()}] Output state: {result}")
 
         return result

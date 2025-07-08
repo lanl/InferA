@@ -3,24 +3,36 @@ import pandas as pd
 from typing import Any, Dict
 from tabulate import tabulate
 
-def pretty_print_df(df: pd.DataFrame, max_rows: int = 50, tablefmt: str = 'fancy_grid'):
+pd.set_option('display.float_format', '{:.15f}'.format)
+
+def pretty_print_df(
+    df: pd.DataFrame, 
+    max_rows: int = 50, 
+    tablefmt: str = 'fancy_grid',
+    return_output: bool = False
+) -> str | None:
     """
     Pretty prints a DataFrame using tabulate, trimmed to fit terminal size.
-
+    
     Args:
         df (pd.DataFrame): The DataFrame to print.
-        max_rows (int): Max number of rows to display (default: 20).
+        max_rows (int): Max number of rows to display (default: 50).
         tablefmt (str): Tabulate format (default: 'fancy_grid').
+        return_output (bool): If True, returns output string instead of printing.
+        
+    Returns:
+        str | None: Formatted output string if return_output is True, else None.
     """
     term_width = shutil.get_terminal_size((120, 20)).columns
+    output_lines = []
 
-    # Print summary
-    print(f"DataFrame summary:")
-    print(f"- Number of rows: {len(df)}")
-    print(f"- Number of columns: {len(df.columns)}")
-    print(f"- Columns: {list(df.columns)}\n")
+    # Build summary
+    output_lines.append("DataFrame summary:")
+    output_lines.append(f"- Number of rows: {len(df)}")
+    output_lines.append(f"- Number of columns: {len(df.columns)}")
+    output_lines.append(f"- Columns: {list(df.columns)}\n")
 
-    # # Limit rows
+    # Limit rows
     df_trimmed = df.head(max_rows)
 
     # Estimate column widths
@@ -30,15 +42,28 @@ def pretty_print_df(df: pd.DataFrame, max_rows: int = 50, tablefmt: str = 'fancy
     # Trim columns if too wide
     col_list = df.columns.tolist()
     while estimate_col_widths(col_list) > term_width and len(col_list) > 1:
-        col_list.pop()  # remove last column
+        col_list.pop()
 
     df_final = df_trimmed[col_list]
 
-    # Tabulate and print
-    print(tabulate(df_final, headers='keys', tablefmt=tablefmt, showindex=False))
+    # Create tabulated string
+    table_str = tabulate(df_final, headers='keys', tablefmt=tablefmt, showindex=False)
+    output_lines.append(table_str)
+
+    final_output = "\n".join(output_lines)
+
+    if return_output:
+        return final_output
+    else:
+        print(final_output)
 
 
-def pretty_print_dict(data: Dict[Any, Any], max_items: int = 50, tablefmt: str = 'fancy_grid'):
+def pretty_print_dict(
+    data: Dict[Any, Any], 
+    max_items: int = 50, 
+    tablefmt: str = 'fancy_grid', 
+    return_output: bool = False
+) -> str | None:
     """
     Pretty prints a dictionary using tabulate, trimmed to fit terminal size.
 
@@ -46,20 +71,25 @@ def pretty_print_dict(data: Dict[Any, Any], max_items: int = 50, tablefmt: str =
         data (dict): Dictionary to pretty-print.
         max_items (int): Maximum number of items to display (default: 50).
         tablefmt (str): Tabulate format (default: 'fancy_grid').
+        return_output (bool): If True, returns output string instead of printing.
+
+    Returns:
+        str | None: Formatted string if return_output is True, else None.
     """
     term_width = shutil.get_terminal_size((120, 20)).columns
+    output_lines = []
 
-    print("Dictionary summary:")
-    print(f"- Number of items: {len(data)}\n")
+    output_lines.append("Dictionary summary:")
+    output_lines.append(f"- Number of items: {len(data)}\n")
 
-    # Convert dictionary to a list of key-value pairs
+    # Get subset of items
     items = list(data.items())[:max_items]
 
-    # Estimate column widths for key and value
+    # Estimate row width
     def estimate_row_widths(items):
-        return max((len(str(k)) + len(str(v)) + 7) for k, v in items)  # +7 for borders/padding
+        return max((len(str(k)) + len(str(v)) + 7) for k, v in items) if items else 0
 
-    # If the content is too wide, truncate values
+    # Adjust items to fit terminal width
     adjusted_items = []
     for k, v in items:
         key_str = str(k)
@@ -67,8 +97,15 @@ def pretty_print_dict(data: Dict[Any, Any], max_items: int = 50, tablefmt: str =
         if estimate_row_widths([(k, v)]) > term_width:
             max_val_len = term_width - len(key_str) - 10
             if max_val_len > 0:
-                val_str = str(v)[:max_val_len] + '...'
+                val_str = val_str[:max_val_len] + '...'
         adjusted_items.append((key_str, val_str))
 
-    # Tabulate and print
-    print(tabulate(adjusted_items, headers=["Key", "Value"], tablefmt=tablefmt, showindex=False))
+    table_str = tabulate(adjusted_items, headers=["Key", "Value"], tablefmt=tablefmt, showindex=False)
+    output_lines.append(table_str)
+
+    final_output = "\n".join(output_lines)
+
+    if return_output:
+        return final_output
+    else:
+        print(final_output)

@@ -28,10 +28,11 @@ class Node(NodeBase):
             "You provide detailed and extensive steps to the responsible team member that can be executed sequentially to solve the user's task." \
             "" \
             "Your team members are as follows:"
-            "- DataLoader: This member loads the necessary files for downstream analysis from the large set of files in the database, and is aware of the file contents. This member writes those files to a database which all other agents will have access to."
-            "- SQLProgrammer: This member filters data for large datasets. He is your go-to first agent so that the other data analysis members are not overwhelmed by large amounts of data. However, he is only able to perform one basic SQL query at a time. If the SQL required is more than 3 layers of filtering, redirect to PythonProgrammer instead."
+            "- DataLoader: This member loads the necessary files for downstream analysis from the large set of files in the database, and is aware of the file contents. This member writes those files to a database which all other agents will have access to. If visualization is required, make sure to ask DataLoader to load coordinate data too."
+            "- SQLProgrammer: This member filters data for large datasets. He is your go-to first agent so that the other data analysis members are not overwhelmed by large amounts of data. However, he is only able to perform one basic SQL query at a time. If the SQL requires more than 2 layers of filtering, break the problem down into different tasks."
             "- PythonProgrammer: This member is a world-class python programmer, and is able to perform more complex analysis on the given data that the SQLProgrammer cannot do with basic SQL, including algorithmic calculations."
             "- Visualization: This member is able to take the filtered data from the python programmer and visualize it." \
+            "- Summary: This member summarizes the final result. Always add the Summary member at the end of the task to summarize findings."
             "" \
             "The simulation data is outlined as follows: "
             "- simulation: Each simulation was performed with different initial conditions. The simulation directory contains timestep calculations for hundreds of timesteps." \
@@ -43,7 +44,8 @@ class Node(NodeBase):
             "Examples: TASK: Find the largest halo from timestep 498 in simulation 0.\n"
             "- DataLoader: Identifies halo files and also writes those data files to a database."
             "- SQLProgrammer: Reads the database, runs a SQL query based on schema context, which filters and extracts the largest halos from timestep 498 in simulation 0, writes data to a dataframe." \
-            "- PythonProgrammer: Summarizes the dataframe from SQLProgrammer."
+            "- PythonProgrammer: Computes further filtering on the dataframe from SQLProgrammer." \
+            "- Summary: Summarizes the results from PythonProgrammer."
             "- Complete. No need to call other members for additional tasks." \
             "" \
             "Respond only with JSON, dividing each step of the task."
@@ -66,9 +68,9 @@ class Node(NodeBase):
                 }
     
     def pretty_print_steps(self, plan):
-        str = f"\n\033[1m\033[31mTask: {plan["task"]}\033[0m\n\n"
+        str = f"\n\033[1;35mTask: {plan["task"]}\033[0m\n\n"
         count = 1
         for i in plan['steps']:
-            str += f"\033[1m\033[31m   - Step {count}: {i['description']}\033[0m\n\n"
+            str += f"\033[1;35m  - Step {count}: {i['description']}\033[0m\n\n"
             count += 1
         return str

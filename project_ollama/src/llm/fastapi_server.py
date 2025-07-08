@@ -31,7 +31,6 @@ async def query_agent(request: Request, pandas_code: str = Form(...), file: Uplo
 
         # result = eval(pandas_code, {"df": df, "pd": pd})
         logger.info(f"[SANDBOX SERVER] Pandas code executed successfully on dataframe. Result type: {type(result)}")
-        print(result)
         
         # Convert the result to a JSON-serializable format
         if isinstance(result, pd.DataFrame):

@@ -8,6 +8,7 @@ class State(TypedDict):
     user_inputs: Annotated[list[BaseMessage], add_messages]
 
     session_id: str
+    model: str
 
     current: str
     next: str
@@ -39,6 +40,6 @@ class State(TypedDict):
     qa_failed: bool
 
     # data analysis nodes
-    df_path: list
+    results_list: list
     df_index: int
 

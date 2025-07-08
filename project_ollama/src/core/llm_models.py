@@ -1,4 +1,5 @@
 import logging
+from pydantic import PrivateAttr
 
 from langchain_ollama import ChatOllama
 from langchain_ollama import OllamaEmbeddings
@@ -36,6 +37,7 @@ class LanguageModelManager:
     def __init__(self):
         """Initialize language model manager"""
         self.logger = logger
+        self.server = None
         self.llm = None
         self.power_llm = None
         self.json_llm = None
@@ -86,27 +88,30 @@ class LanguageModelManager:
                 server = "OpenAI API"
                 model = OPENAI_MODEL_NAME
                 embed_model = OPENAI_EMBED_MODEL_NAME
-                self.llm = ChatOpenAI(
+                self.llm = TokenAwareChatOpenAI(
                     api_key = OPENAI_API_KEY,
                     model_name = OPENAI_MODEL_NAME,
                     temperature = 0,
                     max_tokens = 4096,
-                    callbacks = [self.token_tracker],
+                    # callbacks = [self.token_tracker],
+                    token_tracker = self.token_tracker
                 )
-                self.power_llm = ChatOpenAI(
+                self.power_llm = TokenAwareChatOpenAI(
                     api_key = OPENAI_API_KEY,
                     model_name = OPENAI_MODEL_NAME,
                     temperature = 0.5,
                     max_tokens = 4096,
-                    callbacks = [self.token_tracker],
+                    # callbacks = [self.token_tracker],
+                    token_tracker = self.token_tracker
                 )
-                self.json_llm = ChatOpenAI(
+                self.json_llm = TokenAwareChatOpenAI(
                     api_key = OPENAI_API_KEY,
                     model_name = OPENAI_MODEL_NAME,
                     temperature = 0,
                     max_tokens = 4096,
                     model_kwargs={"response_format": {"type": "json_object"}},
-                    callbacks = [self.token_tracker],
+                    # callbacks = [self.token_tracker],
+                    token_tracker = self.token_tracker
                 )
                 self.embed_llm = OpenAIEmbeddings(
                     api_key = OPENAI_API_KEY,
@@ -154,6 +159,7 @@ class LanguageModelManager:
             Embed model:    {embed_model}
             ###########################
             """)
+            self.server = server
 
         except Exception as e:
             self.logger.error(f"Error initializing language models: {str(e)}")
@@ -163,11 +169,25 @@ class LanguageModelManager:
     def get_models(self):
         """Return all initialized language models"""
         return {
+            "server": self.server,
             "llm": self.llm,
             "power_llm": self.power_llm,
             "json_llm": self.json_llm,
             "embed_llm": self.embed_llm
         }
+
+
+class TokenAwareChatOpenAI(ChatOpenAI):
+    _token_tracker: BaseCallbackHandler = PrivateAttr()
+
+    def __init__(self, *args, token_tracker: BaseCallbackHandler, **kwargs):
+        super().__init__(*args, callbacks=[token_tracker], **kwargs)
+        self._token_tracker = token_tracker
+
+    def invoke(self, *args, **kwargs):
+        if self._token_tracker.check_limit_exceeded():
+            raise RuntimeError("Token usage limit exceeded. Aborting LLM call.")
+        return super().invoke(*args, **kwargs)
 
 
 class TokenTrackingHandler(BaseCallbackHandler):
@@ -177,6 +197,16 @@ class TokenTrackingHandler(BaseCallbackHandler):
         self.completion_tokens = 0
         self.total_tokens = 0
         self.cache_tokens = 0
+        self.max_token_limit = 50000
+
+        # Pricing per million tokens ($)
+        self.cost_per_million_prompt = 2.5
+        self.cost_per_million_completion = 1.25
+        self.cost_per_million_cache = 10
+    
+    def on_llm_start(self, *args, **kwargs):
+        if self.check_limit_exceeded():
+            raise RuntimeError("Token usage limit exceeded. Blocking LLM start.")
 
     def on_llm_end(self, response, **kwargs):
         if hasattr(response, 'llm_output') and response.llm_output:
@@ -185,7 +215,10 @@ class TokenTrackingHandler(BaseCallbackHandler):
             self.completion_tokens += usage.get('completion_tokens', 0)
             self.total_tokens += usage.get('total_tokens', 0)
             self.cache_tokens += usage.get('cache_creation_input_tokens', 0) + usage.get('cache_read_input_tokens', 0)
-            self.logger.info(f"[CURRENT USAGE]{self.get_usage()}")
+            self.logger.info(f"[CURRENT USAGE]{self.get_usage()}, {self.get_cost():.6f} $")
+
+    def check_limit_exceeded(self) -> bool:
+        return self.max_token_limit is not None and self.total_tokens >= self.max_token_limit
 
     def get_usage(self):
         return {
@@ -194,3 +227,14 @@ class TokenTrackingHandler(BaseCallbackHandler):
             'total_tokens': self.total_tokens,
             'cache_tokens': self.cache_tokens
         }
+    
+    def get_cost(self) -> float:
+        """
+        Returns the approximate cost in dollars based on token usage.
+        """
+        prompt_cost = self.prompt_tokens * self.cost_per_million_prompt / 1_000_000
+        completion_cost = self.completion_tokens * self.cost_per_million_completion / 1_000_000
+        cache_cost = self.cache_tokens * self.cost_per_million_cache / 1_000_000
+
+        total_cost = prompt_cost + completion_cost + cache_cost
+        return total_cost
