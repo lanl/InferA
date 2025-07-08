@@ -61,6 +61,7 @@ class Node(NodeBase):
         
     
     def run(self, state):
+        messages = state["messages"]
         plan = state["plan"]
         steps = plan['steps']
         current_step = state.get("current_step", 1)
@@ -73,12 +74,13 @@ class Node(NodeBase):
 
             # Use failed_chain instead of chain
             response = self.failed_chain.invoke({
-                'message': steps[current_step-1]["description"],
+                # Only get the last 4 messages to keep token usage down
+                'message': messages[-3:],
                 'failed_msg': stashed_msg,
                 'current_step': current_step,
+                'step': steps[current_step-1]["description"],
                 'plan': plan
             })
-            current_step += 1
             return {"messages": [response], "current": "Supervisor", "next": "RoutingTool", "current_step": current_step, "qa_failed": False}
         
         if current_step > len(steps):
@@ -88,7 +90,7 @@ class Node(NodeBase):
         print(f"\033[1;36m[SUPERVISOR] Starting step {current_step}...\n    - TASK: {steps[current_step-1]["description"]}\n\033[0m")
 
         # task to be sent to agents is updated in the tool along with the routing
-        response = self.chain.invoke({'message': steps[current_step-1]["description"], 'current_step': current_step, 'plan': plan})
+        response = self.chain.invoke({'message': messages[-3:], 'current_step': current_step, "step": steps[current_step-1]["description"], 'plan': plan})
 
         current_step += 1
         return {"messages": [response], "current": "Supervisor", "next": "RoutingTool", "current_step": current_step}

@@ -12,6 +12,10 @@ from openai import DefaultHttpxClient
 
 # import all lanlAI configs
 from src.utils.config import (
+    MAX_TOKEN_LIMIT
+)
+
+from src.utils.config import (
     ENABLE_LANLAI, 
     LANLAI_API_URL, 
     LANLAI_API_TOKEN, 
@@ -197,7 +201,7 @@ class TokenTrackingHandler(BaseCallbackHandler):
         self.completion_tokens = 0
         self.total_tokens = 0
         self.cache_tokens = 0
-        self.max_token_limit = 50000
+        self.max_token_limit = MAX_TOKEN_LIMIT
 
         # Pricing per million tokens ($)
         self.cost_per_million_prompt = 2.5
@@ -206,7 +210,8 @@ class TokenTrackingHandler(BaseCallbackHandler):
     
     def on_llm_start(self, *args, **kwargs):
         if self.check_limit_exceeded():
-            raise RuntimeError("Token usage limit exceeded. Blocking LLM start.")
+            logger.error(RuntimeError("Token usage limit exceeded. Blocking LLM start."))
+            quit()
 
     def on_llm_end(self, response, **kwargs):
         if hasattr(response, 'llm_output') and response.llm_output:

@@ -150,6 +150,7 @@ class WorkflowManager:
         )
 
         self.workflow.add_edge("Planner", "Verifier")
+        # self.workflow.add_edge("Planner", END)
     
         self.workflow.add_conditional_edges(
             "Verifier",
@@ -201,6 +202,7 @@ class WorkflowManager:
 
         self.workflow.add_edge("SQLProgrammer", "QA")
         self.workflow.add_edge("PythonProgrammer", "QA")
+        # self.workflow.add_edge("PythonProgrammer", END)
 
         self.workflow.add_conditional_edges(
             "RoutingTool",
@@ -212,7 +214,8 @@ class WorkflowManager:
                 "SQLProgrammer": "SQLProgrammer",
                 "PythonProgrammer": "PythonProgrammer",
                 "Visualization": "Supervisor",
-                "Summary": "Summary"
+                "Summary": "Summary",
+                "HumanFeedback": "HumanFeedback"
             }
         )
 

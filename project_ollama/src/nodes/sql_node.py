@@ -23,6 +23,7 @@ class Node(NodeBase):
     def run(self, state):
         # Based on user feedback, revise plan or continue to steps       
         task = state["task"]
+        session_id = state.get("session_id", "")
         
         db_path = state.get("db_path", None)
         object_type = state.get("object_type", None)
@@ -58,8 +59,8 @@ class Node(NodeBase):
                 print("SQL Filtered data:")
                 pp_df = pretty_print_df(sql_response, return_output = True)
                 
-                csv_output = f"{WORKING_DIRECTORY}{df_index}.csv"
-                logger.info(f"\033[1;33m[SQL PROGRAMMER] Writing dataframe result to {csv_output}.\033[0m")
+                csv_output = f"{WORKING_DIRECTORY}{session_id}_{df_index}.csv"
+                logger.info(f"\033[44m[SQL PROGRAMMER] Writing dataframe result to {csv_output}.\033[0m")
                 sql_response.to_csv(csv_output, index= False)
 
                 df_index += 1
@@ -114,6 +115,7 @@ class Node(NodeBase):
             "Domain Knowledge:\n"
             "- The simulation data includes: simulations (different initial conditions), timesteps (hundreds per simulation), and files for various cosmology objects.\n"
             "- Object files include: dark matter halos, halo particles, galaxies, and galaxy particles, with coordinate and physical properties.\n\n"
+            "- Always include a column containing unique identifiers."
             "Task:"
             "{task}"
             ""

@@ -27,7 +27,6 @@ class Node(NodeBase):
     
     def run(self, state):
         task = state["task"]
-        session_id = state.get("session_id", "")
         db_path = state.get("db_path", None)
         results_list = state.get("results_list", [])
         df_index = state.get("df_index", 0)
@@ -55,19 +54,19 @@ class Node(NodeBase):
             return self._error_response(f"LLM failed to generate code: {e}")
 
 
-        python_code = self.extract_code_block(response.get("python_code", ""))
+        pandas_code = self.extract_code_block(response.get("pandas_code", ""))
 
         explanation = response.get("explanation", "")
-        logger.info(f"[PYTHON PROGRAMMER] Generated pandas code:\n{python_code}\nExplanation:\n{explanation}")
+        logger.info(f"[PYTHON PROGRAMMER] Generated pandas code:\n{pandas_code}\nExplanation:\n{explanation}")
             
         # Execute the code safely from fastAPI server
         try:
-            result = pd.DataFrame.from_dict(query_dataframe_agent(df, python_code))
+            result = query_dataframe_agent(df, pandas_code)
         except Exception as e:
             logger.error(f"Execution error: {e}")
             return self._error_response(f"Failed to execute code on server: {e}")
     
-        return self._handle_result(result, python_code, df_index, results_list, explanation, session_id)
+        return self._handle_result(result, pandas_code, df_index, results_list, explanation)
 
 
     def _load_dataframe(self, results_list, db_path):
@@ -123,7 +122,7 @@ class Node(NodeBase):
     def _generate_pandas(self):
         pandas_schema = [
             ResponseSchema(
-                name="python_code", 
+                name="pandas_code", 
                 description="Python code using pandas to process or analyze the input DataFrame, input_df."
             ),
             ResponseSchema(
@@ -192,7 +191,7 @@ class Node(NodeBase):
         return prompt_template | self.llm | output_parser
     
 
-    def _handle_result(self, result, python_code, df_index, results_list, explanation, session_id):
+    def _handle_result(self, result, pandas_code, df_index, results_list, explanation):
         """
         Process the result returned by executing the generated pandas code.
         """
@@ -201,8 +200,8 @@ class Node(NodeBase):
                 return self._error_response(error_str)
         
         elif isinstance(result, pd.DataFrame):
-            return_file = f"{WORKING_DIRECTORY}{session_id}_{df_index}.csv"
-            logger.info(f"\033[44m[PYTHON PROGRAMMER] Writing dataframe to {return_file}\033[0m")
+            return_file = f"{WORKING_DIRECTORY}{df_index}.csv"
+            self._log_info(f"[PYTHON PROGRAMMER] Writing dataframe to {return_file}")
             result.to_csv(return_file, index=False)
             df_index += 1
             results_list.append((return_file, explanation))
@@ -214,7 +213,7 @@ class Node(NodeBase):
             pretty_output = pretty_print_dict(result, return_output=True)
         else:
             pretty_output = str(result)
-        stashed_msg = f"Python code\n{python_code}\n\nOutput:\n{pretty_output}"
+        stashed_msg = f"Python code\n{pandas_code}\n\nOutput:\n{pretty_output}"
         return {
             "next": "QA",
             "current": "PythonProgrammer",

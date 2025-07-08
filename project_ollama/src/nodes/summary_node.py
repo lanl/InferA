@@ -56,7 +56,7 @@ class Node(NodeBase):
                 "df_describe": "Not a dataframe."
             })
         
-        return {"messages": [f"{pp_df}\n\n{summary.content}"], "next": "Supervisor", "current": "Summary"}
+        return {"messages": [f"{pp_df}\n\n\033[1;35m{summary.content}\033[0m"], "next": "Supervisor", "current": "Summary"}
     
 
     def _generate_summary(self):

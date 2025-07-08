@@ -30,24 +30,21 @@ class Node(NodeBase):
             
             "If the output scores above {threshold}, redirect to Supervisor.\n"
             "If the output scores below {threshold}, redirect back to {member} with the following as part of the task parameter:\n"
-            "1. Clearly identify what is missing, incorrect, or poorly executed in the previous response.\n"
-            "2. Provide a precise, revised task description that outlines the necessary corrections or improvements.\n"
-            "3. Highlight any critical areas where the agent must pay special attention, such as edge cases, data handling, assumptions, or formatting.\n"
-            "4. Use the redirect tool to send this revised task back to the same agent: {member}.\n\n"
 
             "### RESPONSE FORMAT:\n"
-            "- If revisions are required, your entire response must be the new task string only, incorporating clear, actionable feedback.\n"
-            "- Include the numeric grade between 1 and 100 that reflects how well the output fulfills the task requirements.\n"
-            "- Do NOT include any explanations, commentary, or extraneous text outside the prescribed response.\n"
-            "- If code was given to you, respond with the code and changes to that code that are needed.\n"
+            "1. Clearly identify only what is missing, incorrect, or poorly executed in the previous response.\n"
+            "2. Provide a precise description that outlines the necessary corrections or improvements.\n"
+            "3. Highlight any critical areas where the agent must pay special attention, such as edge cases, data handling, assumptions, or formatting.\n"
+            "4. If revisions are required, please provide clear, actionable feedback that directly revises the agent's output.\n"
+            "5. Include the numeric grade between 1 and 100 that reflects how well the output fulfills the task requirements.\n"
+            "6. Do NOT include any explanations, commentary, or extraneous text outside the prescribed response.\n"
+            "7/ If code was given to you, respond with specific changes to that code that are needed.\n"
 
             "---\n"
             "### CONTEXT TO REVIEW:\n"
             "Task assigned:\n'''{message}'''\n\n"
             "Agent who completed the task: {member}\n\n"
             "Agent's last output:\n'''{stashed_msg}'''\n\n"
-            "{member}'s requirements\n"
-            "{requirements}"
             "---"
             "Respond only with JSON."
         )
@@ -70,34 +67,34 @@ class Node(NodeBase):
         max_retries = 1
         threshold = 50
 
-        requirements = ""
-        if previous_node == "SQLProgrammer":
-            requirements = '''
-                "- Query only the 'data' table.\n"
-                "- Select only the columns that are relevant to the task.\n"
-                "- Never use SELECT * — be explicit about which columns to return.\n"
-                "- Optionally ORDER BY a meaningful column (e.g., mass, velocity) to get significant examples.\n"
-                "- NEVER make data modifications (no INSERT, UPDATE, DELETE, DROP, etc.).\n"
-                "- Always ensure your SQL is valid {dialect} syntax.\n"
-                "- Only generate a SQL query — do not explain, comment, or return anything else.\n\n"
-                '''
-        if previous_node == "PythonProgrammer":
-            requirements = '''
-                ***STRICT RULES (Always Follow These):***
-                - ❌ NEVER import any libraries (no `import pandas`, `import numpy`, etc.).
-                - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
-                - ✅ ALWAYS assign the final result to a single DataFrame named `result_df`.
-                - ❌ NEVER use loops, file I/O, or print statements.
-                - ✅ Use only pandas and numpy operations.
-                - ✅ If the user’s task applies to only part of the DataFrame, return just the relevant rows or columns.
-            '''
+        # requirements = ""
+        # if previous_node == "SQLProgrammer":
+        #     requirements = '''
+        #         "- Query only the 'data' table.\n"
+        #         "- Select only the columns that are relevant to the task.\n"
+        #         "- Never use SELECT * — be explicit about which columns to return.\n"
+        #         "- Optionally ORDER BY a meaningful column (e.g., mass, velocity) to get significant examples.\n"
+        #         "- NEVER make data modifications (no INSERT, UPDATE, DELETE, DROP, etc.).\n"
+        #         "- Always ensure your SQL is valid {dialect} syntax.\n"
+        #         "- Only generate a SQL query — do not explain, comment, or return anything else.\n\n"
+        #         '''
+        # if previous_node == "PythonProgrammer":
+        #     requirements = '''
+        #         ***STRICT RULES (Always Follow These):***
+        #         - ❌ NEVER import any libraries (no `import pandas`, `import numpy`, etc.).
+        #         - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
+        #         - ✅ ALWAYS assign the final result to a single DataFrame named `result_df`.
+        #         - ❌ NEVER use loops, file I/O, or print statements.
+        #         - ✅ Use only pandas and numpy operations.
+        #         - ✅ If the user’s task applies to only part of the DataFrame, return just the relevant rows or columns.
+        #     '''
 
         response = self.chain.invoke({
             'message': task, 
             'member': previous_node, 
             'stashed_msg': stashed_msg, 
             "threshold": threshold,
-            "requirements": requirements
+            # "requirements": requirements
         })
 
         try:
@@ -109,6 +106,8 @@ class Node(NodeBase):
             revised_task = ""
 
         if score < threshold:
+            revised_task = f"**INITIAL TASK:**\n{task}\n\n**YOUR LAST OUTPUT**\n{stashed_msg}\n\n**REVISIONS NEEDED:**{revised_task}"
+            logger.info(revised_task)
             qa_retries += 1
             if qa_retries > max_retries:
                 return {

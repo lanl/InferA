@@ -186,7 +186,7 @@ class Node(NodeBase):
         if retrieved_docs and file_index and db_path:
             logger.info(f"[DATALOADER] All dataloading tasks complete.")
             return {
-                "messages": [AIMessage("✅ \033[1;32mAll dataloading tasks completed. Loaded in necessary data, and wrote to {db_path}. SUCCESS: Move on to the next task.\033[0m")], 
+                "messages": [AIMessage(f"✅ \033[1;32mAll dataloading tasks completed. Loaded in necessary data, and wrote to {db_path}. SUCCESS: Move on to the next task.\033[0m")], 
                 "next": "Supervisor", 
                 "current": "DataLoader"
             }
