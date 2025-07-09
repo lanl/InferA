@@ -1,6 +1,7 @@
 import logging
 from langchain_core.messages import HumanMessage, AIMessage
-from src.langgraph_class.node_base import NodeBase
+
+from src.nodes.node_base import NodeBase
 from src.utils.config import DISABLE_FEEDBACK
 
 logger = logging.getLogger(__name__)

@@ -28,7 +28,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import ToolNode
 
 from src.core.state import State
-from src.langgraph_class.node_base import NodeBase
+from src.nodes.node_base import NodeBase
+
 from src.nodes import (
     dataloader_node, 
     human_feedback_node, 
@@ -39,7 +40,8 @@ from src.nodes import (
     sql_node,
     QA_node,
     python_node,
-    summary_node
+    summary_node,
+    visualization_node
 )
 
 from src.tools import (
@@ -105,6 +107,7 @@ class WorkflowManager:
         agents["Retriever"] = retriever_node.Node(embed_llm, server)
         agents["SQLProgrammer"] = sql_node.Node(llm)
         agents["PythonProgrammer"] = python_node.Node(llm)
+        agents["Visualization"] = visualization_node.Node(llm)
 
         return agents
 
@@ -134,6 +137,7 @@ class WorkflowManager:
 
         self.workflow.add_node("SQLProgrammer", self.agents["SQLProgrammer"])
         self.workflow.add_node("PythonProgrammer", self.agents["PythonProgrammer"])
+        self.workflow.add_node("Visualization", self.agents["Visualization"])
 
         self.workflow.add_node("DataLoaderTool", ToolNode(self.tools["dataloader_tools"]))
         self.workflow.add_node("RoutingTool", ToolNode(self.tools["routing_tools"]))
@@ -203,6 +207,7 @@ class WorkflowManager:
         self.workflow.add_edge("SQLProgrammer", "QA")
         self.workflow.add_edge("PythonProgrammer", "QA")
         # self.workflow.add_edge("PythonProgrammer", END)
+        self.workflow.add_edge("Visualization", "QA")
 
         self.workflow.add_conditional_edges(
             "RoutingTool",
@@ -213,7 +218,7 @@ class WorkflowManager:
                 "Supervisor": "Supervisor",
                 "SQLProgrammer": "SQLProgrammer",
                 "PythonProgrammer": "PythonProgrammer",
-                "Visualization": "Supervisor",
+                "Visualization": "Visualization",
                 "Summary": "Summary",
                 "HumanFeedback": "HumanFeedback"
             }
@@ -240,7 +245,8 @@ class WorkflowManager:
                 "Supervisor": "Supervisor",
                 "SQLProgrammer": "SQLProgrammer",
                 "DataLoader": "DataLoader",
-                "PythonProgrammer": "PythonProgrammer"
+                "PythonProgrammer": "PythonProgrammer",
+                "Visualization": "Visualization"
             }
         )
 

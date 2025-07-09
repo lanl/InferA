@@ -4,11 +4,10 @@ import logging
 
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_community.vectorstores import FAISS
 from langchain_core.messages import AIMessage
 
-from src.langgraph_class.node_base import NodeBase
+from src.nodes.node_base import NodeBase
 
 logger = logging.getLogger(__name__)
 

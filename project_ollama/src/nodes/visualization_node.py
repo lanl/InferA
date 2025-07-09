@@ -1,7 +1,6 @@
 import logging
 import duckdb
 import pandas as pd
-from typing import Dict
 import re
 import json
 
@@ -9,64 +8,63 @@ from langchain_core.messages import AIMessage
 from langchain.prompts import PromptTemplate
 from langchain.output_parsers.structured import ResponseSchema, StructuredOutputParser
 
-from src.langgraph_class.node_base import NodeBase
-from src.utils.config import WORKING_DIRECTORY
-
-from src.llm.fastapi_client import query_dataframe_agent
+from src.nodes.node_base import NodeBase
+from src.core.fastapi_client import query_dataframe_agent
 
 from src.utils.dataframe_utils import pretty_print_df, pretty_print_dict
+from src.utils.config import WORKING_DIRECTORY
 
 
 logger = logging.getLogger(__name__)
 
 class Node(NodeBase):
     def __init__(self, llm):
-        super().__init__("Python")
+        super().__init__("Visualization")
         self.llm = llm
-        self.generate_pandas = self._generate_pandas()
+        self.generate_code = self._generate_code()
     
     def run(self, state):
         task = state["task"]
+        session_id = state.get("session_id", "")
         db_path = state.get("db_path", None)
         results_list = state.get("results_list", [])
         df_index = state.get("df_index", 0)
 
-        # Aggregate all explanations for previous dfs
-        explanations = self._aggregate_explanations(results_list)
+        last_explanation = self._get_last_explanation(results_list)
 
         # Load dataframes for processing
         df = self._load_dataframe(results_list, db_path)
         if df is None:
-            error_msg = "[PYTHON PROGRAMMER] Failed to load any dataframe for processing."
+            error_msg = "[VISUALIZATION] Failed to load any dataframe for processing."
             return self._error_response(error_msg)
         
         columns = list(df.columns)
         try:
-            response = self.generate_pandas.invoke({
+            response = self.generate_code.invoke({
                 "task": task, 
                 "columns": columns,
                 "df_head": df.head().to_string(),
                 "df_describe": df.describe().to_string(),
-                "explanations": explanations,
+                "explanation": last_explanation,
                 "df_types": df.dtypes.to_string()
             })
         except Exception as e:
             return self._error_response(f"LLM failed to generate code: {e}")
 
 
-        pandas_code = self.extract_code_block(response.get("pandas_code", ""))
+        python_code = self.extract_code_block(response.get("python_code", ""))
 
         explanation = response.get("explanation", "")
-        logger.info(f"[PYTHON PROGRAMMER] Generated pandas code:\n{pandas_code}\nExplanation:\n{explanation}")
+        logger.info(f"[VISUALIZATION] Generated pandas code:\n{python_code}\nExplanation:\n{explanation}")
             
         # Execute the code safely from fastAPI server
         try:
-            result = query_dataframe_agent(df, pandas_code)
+            result = query_dataframe_agent(df, python_code)
         except Exception as e:
             logger.error(f"Execution error: {e}")
-            return self._error_response(f"Failed to execute code on server: {e}")
+            return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}")
     
-        return self._handle_result(result, pandas_code, df_index, results_list, explanation)
+        return self._handle_result(result, python_code, df_index, results_list, explanation, session_id)
 
 
     def _load_dataframe(self, results_list, db_path):
@@ -74,7 +72,7 @@ class Node(NodeBase):
         Load dataframe either from CSV files in results_list or from a database.
         """
         if not results_list:
-            logger.info(f"[PYTHON PROGRAMMER] No dataframes from previous steps. Getting dataframe from db.")       
+            logger.info(f"[VISUALIZATION] No dataframes from previous steps. Getting dataframe from db.")       
             try:
                 db = duckdb.connect(db_path)
                 df = db.execute("SELECT * FROM data").fetchdf()
@@ -84,46 +82,46 @@ class Node(NodeBase):
 
         else:
             try:
-                dfs = []
-                explanations = ""
-                for path, _ in results_list:
-                    if path.endswith(".csv"):
-                        dfs.append(pd.read_csv(path))
-                if not dfs:
-                    logger.error("[PYTHON PROGRAMMER] No CSV files found in results_list.")
+                last_path, _ = results_list[-1]
+                if last_path.endswith(".csv"):
+                    df = pd.read_csv(last_path)
+                    logger.info(f"[VISUALIZATION] Loaded dataframe from: {last_path}")
+                    return df
+                else:
+                    logger.error(f"[VISUALIZATION] Last item is not a CSV: {last_path}")
                     return None
-                combined_df = pd.concat(dfs)
-                logger.info(f"[PYTHON PROGRAMMER] Loaded and concatenated CSV dataframes.")
-                # pretty_print_df(combined_df)
-                return combined_df
 
             except Exception as e:
-                logger.error(f"[PYTHON PROGRAMMER] Failed to load CSV: {str(e)}")
+                logger.error(f"[VISUALIZATION] Failed to load CSV: {str(e)}")
                 return None
     
 
-    def _aggregate_explanations(self, results_list):
+    def _get_last_explanation(self, results_list):
         """
-        Aggregate explanations from previous results.
-        Handles cases where explanation is a dict instead of a string.
+        Return only the last explanation from the results
         """
-        explanation_texts = []
-        for _, explanation in results_list:
-            if isinstance(explanation, dict):
-                try:
-                    explanation_texts.append(json.dumps(explanation, indent=2))
-                except Exception:
-                    explanation_texts.append(str(explanation))
-            else:
-                explanation_texts.append(str(explanation))
-        return "\n".join(explanation_texts)
+        if not results_list:
+            return ""
+        
+        _, last_explanation = results_list[-1]
+        if isinstance(last_explanation, dict):
+            try:
+                return json.dumps(last_explanation, indent=2)
+            except Exception:
+                return str(last_explanation)
+        else:
+            return str(last_explanation)
     
 
-    def _generate_pandas(self):
+    def _generate_code(self):
         pandas_schema = [
             ResponseSchema(
-                name="pandas_code", 
-                description="Python code using pandas to process or analyze the input DataFrame, input_df."
+                name="imports",
+                description="Code Block import statements"
+            ),
+            ResponseSchema(
+                name="python_code", 
+                description="Python code to process the input DataFrame, input_df, into a pyvista.PolyData object written to a VTK-compatible file. Code block not including import statements."
             ),
             ResponseSchema(
                 name="explanation", 
@@ -134,29 +132,59 @@ class Node(NodeBase):
 
         system_prompt = (
             """
-            You are a python coding assistant with expertise in working with the Pandas library.
-            Your task is to transform a pandas DataFrame named `input_df` based on user instructions. 
+            You are a Python coding assistant with expertise in scientific visualization using PyVista, VTK, and MatPlotLib.
+            Your task is to generate code based on a given `pandas.DataFrame` named `input_df`.
+            
+            If you are given coordinates or instructions to plot points, you must convert this DataFrame into a `pyvista.PolyData` object for visualization and write the result to a VTK-compatible file.
+            If you are NOT given coordinates or instructions to plot points, you must plot using MatPlotLib.
 
             ***STRICT RULES (Always Follow These):***
-            - ❌ NEVER import any libraries (no `import pandas`, `import numpy`, etc.).
-            - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
-            - ✅ ALWAYS assign the final result to a single DataFrame named `result_df`.
-            - ❌ NEVER use loops, file I/O, or print statements.
-            - ✅ Use only pandas and numpy operations.
-            - ✅ If the user’s task applies to only part of the DataFrame, return just the relevant rows or columns.
+            - ✅ Use ONLY the following libraries: pandas as pd, numpy as np, pyvista as pv, matplotlib.pyplot as plt.
+            - ✅ If time-series or multiple time steps are detected or implied, write `.pvd` files with per-frame `.vtp` files.
+            - ✅ Always assign the output file name to a single variable named 'result'.
+            - ✅ Always write the final output to directory: `"data_storage/`. Output file can be .vtk, .png, or .pvd (if timeseries coordinate data).
+            - ✅ The output should include all relevant scalar/vector fields and point/mesh geometry derived from the DataFrame.
+            - ✅ Visualization code MUST be tailored to the task and content of the DataFrame (e.g., 3D points, mesh cells, etc.).
+            - ✅ Return a single Python code block inside triple backticks: ```python ...code... ```.
+            - ❌ NEVER include print statements or file reading code.
+            - ✅ Use `pyvista.PolyData(...)` for visualization, not manual VTK bindings.
 
-            ***Incorrect example (Do NOT do this):***
-            ``` # Must add python code block
-            import pandas as pd # Do not import libraries
+            ***Basic Example for coordinate data (Follow This Format When Applicable):***
+            ```python
+            # Convert DataFrame with x, y, z columns into PolyData and write to VTK
+            points = input_df[['x', 'y', 'z']].to_numpy()
+            pdata = pyvista.PolyData(points)
+            pdata['temperature'] = input_df['temp'].to_numpy()
+            pdata.save("data_storage/visual_output.vtk")
             
-            result_df = ...
             ```
 
-            First, think step-by-step about how to perform the task using pandas/numpy.
-            Then, return only the final code inside a Python code block.
+            ***Basic Example for non-coordinate data (Follow This Format When Applicable):***
+            ```python
+            # Assume input_df has columns 'x' and 'y'
+            plt.figure(figsize=(8,6))
+            plt.plot(input_df['x'], input_df['y'], label='Line plot')
+            plt.xlabel('x')
+            plt.ylabel('y')
+            plt.title('Example Plot')
+            plt.legend()
+            plt.savefig("data_storage/plot_output.png")
+            plt.close()
+            ```
+
+            ***Multi-Timestep Example (PVD):***
+            - For each timestep, write a `.vtp` file and add it to a `.pvd` index.
+            - Use naming like: `data_storage/visual_output/frame_000.vtp`, ..., `data_storage/visual_output/visual_output.pvd`
+
+            All DataFrames contain point-based fields.
+            First, analyze the DataFrame to determine which columns to use for visualization.
+            Then, build the appropriate PyVista visualization object and save it accordingly.
 
             **Task:** 
             {task}
+
+            **Previous step in the analysis pipeline:**
+            {explanation}
 
             **Columns in dataframe:**
             {columns}
@@ -174,14 +202,12 @@ class Node(NodeBase):
             **DataFrame types:**
             {df_types}
 
-            **Previous steps in the analysis pipeline:**
-            {explanations}
-
             {format_instructions}
 
             Respond only with JSON.
             """
         )
+
         
         prompt_template = PromptTemplate(
             template=system_prompt,
@@ -191,17 +217,17 @@ class Node(NodeBase):
         return prompt_template | self.llm | output_parser
     
 
-    def _handle_result(self, result, pandas_code, df_index, results_list, explanation):
+    def _handle_result(self, result, python_code, df_index, results_list, explanation, session_id):
         """
         Process the result returned by executing the generated pandas code.
         """
         if isinstance(result, dict) and "error_type" in result and "error_message" in result:
-                error_str = f"Execution returned error: {result['error_type']}: {result['error_message']}"
-                return self._error_response(error_str)
+            error_str = f"Execution returned error: {result['error_type']}: {result['error_message']}.\nCode: {python_code}"
+            return self._error_response(error_str)
         
         elif isinstance(result, pd.DataFrame):
-            return_file = f"{WORKING_DIRECTORY}{df_index}.csv"
-            self._log_info(f"[PYTHON PROGRAMMER] Writing dataframe to {return_file}")
+            return_file = f"{WORKING_DIRECTORY}{session_id}_{df_index}.csv"
+            logger.info(f"\033[44m[VISUALIZATION] Writing dataframe to {return_file}\033[0m")
             result.to_csv(return_file, index=False)
             df_index += 1
             results_list.append((return_file, explanation))
@@ -213,10 +239,10 @@ class Node(NodeBase):
             pretty_output = pretty_print_dict(result, return_output=True)
         else:
             pretty_output = str(result)
-        stashed_msg = f"Python code\n{pandas_code}\n\nOutput:\n{pretty_output}"
+        stashed_msg = f"Python code\n{python_code}\n\nOutput:\n{pretty_output}"
         return {
             "next": "QA",
-            "current": "PythonProgrammer",
+            "current": "Visualization",
             "messages": [AIMessage(f"Pandas code executed successfully.\n\n{pretty_output}")],
             "stashed_msg": stashed_msg,
             "results_list": results_list,
@@ -231,7 +257,7 @@ class Node(NodeBase):
         logger.error(f"\033[1;31m{message}\033[0m")
         return {
             "next": "QA",
-            "current": "PythonProgrammer",
+            "current": "Visualization",
             "messages": [AIMessage(message)],
             "stashed_msg": message,
         }

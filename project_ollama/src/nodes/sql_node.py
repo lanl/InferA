@@ -2,15 +2,13 @@ import logging
 import duckdb
 
 from langchain_core.messages import AIMessage
-from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
+from langchain.prompts import PromptTemplate
 from langchain.output_parsers.structured import ResponseSchema, StructuredOutputParser
-from langchain_core.output_parsers import JsonOutputParser
-# from langchain_community.agent_toolkits import SQLDatabaseToolkit
-# from langchain_community.utilities.sql_database import SQLDatabase
 
-from src.langgraph_class.node_base import NodeBase
-from src.utils.config import WORKING_DIRECTORY
+from src.nodes.node_base import NodeBase
+
 from src.utils.dataframe_utils import pretty_print_df
+from src.utils.config import WORKING_DIRECTORY
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +131,7 @@ class Node(NodeBase):
             "- NEVER make data modifications (no INSERT, UPDATE, DELETE, DROP, etc.).\n"
             "- Always ensure your SQL is valid {dialect} syntax.\n"
             "- Only generate a SQL query — do not explain, comment, or return anything else.\n\n"
+            "- If the task requires it, you may provide multiple independent SQL queries using a semi-colon as a separator."
             ""
             "{format_instructions}"
             ""

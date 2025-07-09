@@ -1,6 +1,10 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
+
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import pyvista as pv
+
 import logging
 import builtins
 
@@ -27,7 +31,9 @@ async def query_agent(request: Request, pandas_code: str = Form(...), file: Uplo
     safe_globals = {
         '__builtins__': safe_builtins,  # minimal built-ins (customize as needed)
         'pd': pd,
-        'np': np
+        'np': np,
+        'plt': plt,
+        'pv': pv
     }
     local_vars = {
         'input_df': df.copy()
@@ -35,7 +41,7 @@ async def query_agent(request: Request, pandas_code: str = Form(...), file: Uplo
 
     try:
         exec(pandas_code, safe_globals, local_vars)
-        result = local_vars.get("result_df")
+        result = local_vars.get("result")
 
         # result = eval(pandas_code, {"df": df, "pd": pd})
         logger.info(f"[SANDBOX SERVER] Pandas code executed successfully on dataframe.")
@@ -48,6 +54,8 @@ async def query_agent(request: Request, pandas_code: str = Form(...), file: Uplo
             # response = result.to_dict(orient='list')
         elif isinstance(result, pd.Series):
             response = result.to_dict()
+        elif isinstance(result, str):
+            response = result
         elif result is None:
             response = None
         else:

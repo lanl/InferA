@@ -1,8 +1,8 @@
 import logging
 from langchain_core.messages import AIMessage
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
-from src.langgraph_class.node_base import NodeBase
+from src.nodes.node_base import NodeBase
 from src.utils.json_loader import open_json
 
 logger = logging.getLogger(__name__)

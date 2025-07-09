@@ -1,20 +1,19 @@
+import re
+import json
 import logging
 import duckdb
 import pandas as pd
-from typing import Dict
-import re
-import json
 
 from langchain_core.messages import AIMessage
 from langchain.prompts import PromptTemplate
 from langchain.output_parsers.structured import ResponseSchema, StructuredOutputParser
 
-from src.langgraph_class.node_base import NodeBase
-from src.utils.config import WORKING_DIRECTORY
-
-from src.llm.fastapi_client import query_dataframe_agent
+from src.nodes.node_base import NodeBase
+from src.core.fastapi_client import query_dataframe_agent
 
 from src.utils.dataframe_utils import pretty_print_df, pretty_print_dict
+from src.utils.config import WORKING_DIRECTORY
+
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +22,7 @@ class Node(NodeBase):
     def __init__(self, llm):
         super().__init__("Python")
         self.llm = llm
-        self.generate_pandas = self._generate_pandas()
+        self.generate_code = self._generate_code()
     
     def run(self, state):
         task = state["task"]
@@ -43,7 +42,7 @@ class Node(NodeBase):
         
         columns = list(df.columns)
         try:
-            response = self.generate_pandas.invoke({
+            response = self.generate_code.invoke({
                 "task": task, 
                 "columns": columns,
                 "df_head": df.head().to_string(),
@@ -65,7 +64,7 @@ class Node(NodeBase):
             result = pd.DataFrame.from_dict(query_dataframe_agent(df, python_code))
         except Exception as e:
             logger.error(f"Execution error: {e}")
-            return self._error_response(f"Failed to execute code on server: {e}")
+            return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}.")
     
         return self._handle_result(result, python_code, df_index, results_list, explanation, session_id)
 
@@ -120,7 +119,7 @@ class Node(NodeBase):
         return "\n".join(explanation_texts)
     
 
-    def _generate_pandas(self):
+    def _generate_code(self):
         pandas_schema = [
             ResponseSchema(
                 name="python_code", 
@@ -141,7 +140,7 @@ class Node(NodeBase):
             ***STRICT RULES (Always Follow These):***
             - ❌ NEVER import any libraries (no `import pandas`, `import numpy`, etc.).
             - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
-            - ✅ ALWAYS assign the final result to a single DataFrame named `result_df`.
+            - ✅ ALWAYS assign the final result to a single DataFrame named `result`.
             - ❌ NEVER use loops, file I/O, or print statements.
             - ✅ Use only pandas and numpy operations.
             - ✅ If the user’s task applies to only part of the DataFrame, return just the relevant rows or columns.
@@ -150,7 +149,7 @@ class Node(NodeBase):
             ``` # Must add python code block
             import pandas as pd # Do not import libraries
             
-            result_df = ...
+            result = ...
             ```
 
             First, think step-by-step about how to perform the task using pandas/numpy.
@@ -197,7 +196,7 @@ class Node(NodeBase):
         Process the result returned by executing the generated pandas code.
         """
         if isinstance(result, dict) and "error_type" in result and "error_message" in result:
-                error_str = f"Execution returned error: {result['error_type']}: {result['error_message']}"
+                error_str = f"Execution returned error: {result['error_type']}: {result['error_message']}.\nCode: {python_code}"
                 return self._error_response(error_str)
         
         elif isinstance(result, pd.DataFrame):

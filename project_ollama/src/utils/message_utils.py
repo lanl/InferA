@@ -38,35 +38,3 @@ def pretty_print_messages(update, last_message=False):
         for m in messages:
             pretty_print_message(m, indent=is_subgraph)
         print("\n")
-
-
-def make_json_serializable(obj):
-    if isinstance(obj, (str, int, float, bool)) or obj is None:
-        return obj
-    elif isinstance(obj, list):
-        return [make_json_serializable(i) for i in obj]
-    elif isinstance(obj, dict):
-        return {k: make_json_serializable(v) for k, v in obj.items()}
-    elif hasattr(obj, 'content'):
-        # likely HumanMessage, AIMessage, etc.
-        return {"type": obj.__class__.__name__, "content": obj.content}
-    else:
-        return str(obj)  # fallback
-    
-
-def reconstruct_message(obj):
-    if isinstance(obj, list):
-        return [reconstruct_message(item) for item in obj]
-    if isinstance(obj, dict) and "type" in obj and "content" in obj:
-        msg_type = obj["type"]
-        content = obj["content"]
-        if msg_type == "HumanMessage":
-            return HumanMessage(content=content)
-        elif msg_type == "AIMessage":
-            return AIMessage(content=content)
-        elif msg_type == "SystemMessage":
-            return SystemMessage(content=content)
-        else:
-            # Unknown type — fallback to dict or raise error
-            return obj
-    return obj

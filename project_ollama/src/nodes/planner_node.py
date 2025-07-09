@@ -1,12 +1,10 @@
 import logging
 from typing import List, TypedDict
 
-from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
-from langchain_core.output_parsers.json import JsonOutputParser
+from pydantic import Field
 
-from src.langgraph_class.node_base import NodeBase
+from src.nodes.node_base import NodeBase
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +27,9 @@ class Node(NodeBase):
 
             Your team members are as follows:"
             - DataLoader: This member loads the necessary files for downstream analysis from the large set of files in the database, and is aware of the file contents. This member writes those files to a database which all other agents will have access to. If visualization is required, make sure to ask DataLoader to load coordinate data too.
-            - SQLProgrammer: This member filters data for large datasets. He is your go-to first agent so that the other data analysis members are not overwhelmed by large amounts of data. However, he is only able to perform one basic SQL query at a time. If the SQL requires more than 2 layers of filtering, break the problem down into different tasks.
+            - SQLProgrammer: This member filters data for large datasets. He is your go-to first agent so that the other data analysis members are not overwhelmed by large amounts of data. However, he only has access to basic SQL features. If the SQL query requires multiple lines, break the problem down into different SQL queries or pass that task to PythonProgrammer.
             - PythonProgrammer: This member is a world-class python programmer, and is able to perform more complex analysis on the given data that the SQLProgrammer cannot do with basic SQL, including algorithmic calculations.
-            - Visualization: This member is able to take the filtered data from the python programmer and visualize it.
+            - Visualization: This member is able to take coordinate data from the python programmer and visualize it. In order to visualize coordinates, dataloader must load coordinate columns from the database.
             - Summary: This member summarizes the final result. Always add the Summary member at the end of the task to summarize findings.
 
             The simulation data is outlined as follows: "

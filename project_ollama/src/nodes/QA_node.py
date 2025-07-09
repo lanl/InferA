@@ -1,10 +1,9 @@
 import logging
-from typing import List, TypedDict
-from langchain_core.messages import AIMessage
+from typing import TypedDict
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import Field
 
-from src.langgraph_class.node_base import NodeBase
+from src.nodes.node_base import NodeBase
 
 logger = logging.getLogger(__name__)
 
@@ -119,14 +118,14 @@ class Node(NodeBase):
                 }
 
             return {
-                "messages": [{"role": "assistant", "content": f"⚠️ \033[1;31mOutput failed with a score of {score}. Routing back to {previous_node} with updated task:\n{revised_task}\033[0m"}], 
+                "messages": [{"role": "assistant", "content": f"⚠️ \033[1;31mOutput from {previous_node} failed with a score of {score}. Routing back to {previous_node} with updated task:\n{revised_task}\033[0m"}], 
                 "task": revised_task, 
                 "next": previous_node,
                 "qa_retries" : qa_retries
             }
         else:
             return {
-                "messages": [{"role": "assistant", "content": f"✅ \033[1;32mOutput passed with a score of {score}. Routing to Supervisor to begin next task.\033[0m"}], 
+                "messages": [{"role": "assistant", "content": f"✅ \033[1;32mOutput from {previous_node} passed with a score of {score}. Routing to Supervisor to begin next task.\033[0m"}], 
                 "next": "Supervisor",
                 "qa_retries": 0
             }

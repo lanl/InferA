@@ -36,8 +36,8 @@ STATE_DICT_PATH = "./state/state.pkl"
 # logger_config.py setup
 ENABLE_LOGGING = True
 ENABLE_DEBUG = False
-# ENABLE_CONSOLE_LOGGING = True
-ENABLE_CONSOLE_LOGGING = False
+ENABLE_CONSOLE_LOGGING = True
+# ENABLE_CONSOLE_LOGGING = False
 
 # graph_builder.py configs - shortcut to skip user query and directly test later nodes
 DISABLE_FEEDBACK = False

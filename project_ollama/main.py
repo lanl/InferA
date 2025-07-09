@@ -8,14 +8,16 @@ import threading
 import uvicorn
 import pickle
 
-from src.utils.message_utils import pretty_print_message, pretty_print_messages, make_json_serializable, reconstruct_message
+import atexit
+
+from src.utils.message_utils import pretty_print_messages
 from src.core.llm_models import LanguageModelManager
 from src.core.workflow import WorkflowManager
-from src.llm import fastapi_client
 from src.utils.logger_config import setup_logger
 
 from src.utils.config import ENABLE_DEBUG, ENABLE_LOGGING, ENABLE_CONSOLE_LOGGING
 from src.utils.config import WORKING_DIRECTORY, STATE_DICT_PATH
+
 
 class MultiAgentSystem:
     def __init__(self, session: str = None, step: str = "0"):
@@ -31,6 +33,8 @@ class MultiAgentSystem:
             language_models = self.lm_manager.get_models(),
             working_directory = WORKING_DIRECTORY
         )
+
+        atexit.register(self.cleanup)
 
     def setup_environment(self):
         # Start FastAPI server in background
@@ -60,16 +64,23 @@ class MultiAgentSystem:
 
 
     def setup_sandbox(self):
-        uvicorn.run("src.llm.fastapi_server:app", host="127.0.0.1", port=8000, reload=False, log_level="info")
+        uvicorn.run("src.core.fastapi_server:app", host="127.0.0.1", port=8000, reload=False, log_level="info")
+
+
+    def cleanup(self):
+        # Save readable log
+        with open(STATE_DICT_PATH, "wb") as f:
+            pickle.dump(self.state_dict, f)
+            self.logger.info(f"[SESSION] All streamed steps saved to {STATE_DICT_PATH}.")
+            print(f"[SESSION] All streamed steps saved to {STATE_DICT_PATH}.")
         
         
     def run(self, user_input: str) -> None:
         session_id = f"{self.session}_{self.step}"
-        state_dict = self.state_dict
         config = {"configurable": {"thread_id": session_id}, "recursion_limit": 50}
 
-        if session_id not in state_dict:
-            state_dict[session_id] = {
+        if session_id not in self.state_dict:
+            self.state_dict[session_id] = {
                 "session_id": self.session,
                 "step": self.step,
                 "messages": [user_input],
@@ -77,10 +88,10 @@ class MultiAgentSystem:
                 "next": "Planner"
             }
         else:
-            self.logger.info(f"[SESSION] Starting previous session from node: {state_dict[session_id]['next']}")
+            self.logger.info(f"[SESSION] Starting previous session from node: {self.state_dict[session_id]['next']}")
 
             # Print entire state dictionary
-            for k, v in state_dict[session_id].items():
+            for k, v in self.state_dict[session_id].items():
                 # Format the value nicely, you can customize this if v is complex
                 if k in ["messages", "user_input", "stashed_msg", "retrieved_docs", "db_columns", "file_index"]:
                     continue
@@ -100,7 +111,7 @@ class MultiAgentSystem:
         graph = self.workflow_manager.get_graph()
 
         try:
-            with open("output/graph_output.png", "wb") as f:
+            with open("state/graph_output.png", "wb") as f:
                 f.write(graph.get_graph().draw_mermaid_png())
         except Exception as e:
             self.logger.warning(e)
@@ -111,16 +122,18 @@ class MultiAgentSystem:
 
         try:
             for k, v in graph.stream(
-                state_dict[session_id], config,
+                self.state_dict[session_id], config,
                 stream_mode = ["values", "updates"]
             ):  
                 try:
                     if k == "updates":
-                        pretty_print_messages(v, last_message=True)
+                        if not ENABLE_CONSOLE_LOGGING:
+                            pretty_print_messages(v, last_message=True)
+                        self.logger.info(pretty_print_messages(v, last_message=True))
                     if k == "values":
                         # Save each step as a new key in state_dict
                         state_key = f"{self.session}_{step_counter}"
-                        state_dict[state_key] = v
+                        self.state_dict[state_key] = v
 
                         step_counter += 1
                         self.logger.info(f"State saved to : {state_key}.")
@@ -131,31 +144,27 @@ class MultiAgentSystem:
                     print(f"Unable to print message {k}:{v}. {e}")
         except Exception as e:
             self.logger.error(e)
-            print(e)    
-
-
-        # Save readable log
-        with open(STATE_DICT_PATH, "wb") as f:
-            pickle.dump(state_dict, f)
-            self.logger.info(f"[SESSION] All streamed steps saved to {STATE_DICT_PATH}.")
-            print(f"[SESSION] All streamed steps saved to {STATE_DICT_PATH}.")
-
+            print(e)
 
 
 def main():
-    session = "116"
-    step = "0"
+    session = "123"
+    step = "29"
     # session_id = None
     system = MultiAgentSystem(session = session, step = step)
 
     # user_input = input("You: ")
 
-    # user_input = "Can you show me the change in mass of the largest friends-of-friends halos for all timesteps in simulation 0?"
-    # user_input = "Can you find me the largest friends-of-friends halo from timestep 498 in simulation 0?"
+    # user_input = "Can you help me plot the change in mass of the largest friends-of-friends halos for all timesteps in simulation 0?"
+    # user_input = "Can you find me the top 20 largest friends-of-friends halos from timestep 498 in simulation 0?"
+    user_input = "I want to visualize the top 20 largest friends-of-friends halos from timestep 498 in simulation 0?"
     # user_input = "Find me the 10 friends-of-friends halos closest in coordinates to the halo with fof_halo_tag = '251375070' in timestep 498 of simulation 0. Use columns 'fof_halo_tag', 'fof_halo_center_x', 'fof_halo_center_y', 'fof_halo_center_z'."
     # user_input = "Can you map out the largest friends-of-friends halos for all timesteps in simulation 0?"
     # user_input = "What are the top 10 largest galaxies in halo with fof_halo_tag = '251375070' in timestep 498 of simulation 0?"
     # user_input = ""
+    # user_input = "Can you plot a vtk of all the halos within 10 Mpc of the largest halo at timestep 498 of simulation 0?"
+    # user_input = "Can you plot a timeseries pvd for all the largest halos at every timestep in simulation 0? At each timestep also include every halo within a distance of 10 Mpc."
+    # user_input = "Visualize all halos within 10 Mpc of the coordinate (20,20,20) for timestep 498 of simulation 0."
     
     system.run(user_input)
 

@@ -1,3 +1,4 @@
+import sys
 import logging
 from pydantic import PrivateAttr
 
@@ -210,8 +211,9 @@ class TokenTrackingHandler(BaseCallbackHandler):
     
     def on_llm_start(self, *args, **kwargs):
         if self.check_limit_exceeded():
-            logger.error(RuntimeError("Token usage limit exceeded. Blocking LLM start."))
-            quit()
+            print(RuntimeError(f"Token usage limit exceeded: {self.max_token_limit}. Blocking LLM call."))
+            logger.error(RuntimeError(f"Token usage limit exceeded: {self.max_token_limit}. Blocking LLM call."))
+            sys.exit()
 
     def on_llm_end(self, response, **kwargs):
         if hasattr(response, 'llm_output') and response.llm_output:
@@ -221,6 +223,7 @@ class TokenTrackingHandler(BaseCallbackHandler):
             self.total_tokens += usage.get('total_tokens', 0)
             self.cache_tokens += usage.get('cache_creation_input_tokens', 0) + usage.get('cache_read_input_tokens', 0)
             self.logger.info(f"[CURRENT USAGE]{self.get_usage()}, {self.get_cost():.6f} $")
+            print(f"Current total token usage: {self.get_usage()}")
 
     def check_limit_exceeded(self) -> bool:
         return self.max_token_limit is not None and self.total_tokens >= self.max_token_limit

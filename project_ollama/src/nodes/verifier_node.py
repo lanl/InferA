@@ -2,7 +2,7 @@ import logging
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 
-from src.langgraph_class.node_base import NodeBase
+from src.nodes.node_base import NodeBase
 
 logger = logging.getLogger(__name__)
 
