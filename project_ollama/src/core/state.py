@@ -8,6 +8,8 @@ class State(TypedDict):
     user_inputs: Annotated[list[BaseMessage], add_messages]
 
     session_id: str
+    state_key: str
+
     model: str
 
     current: str
@@ -25,8 +27,12 @@ class State(TypedDict):
     # dataloader node
     file_index: dict
     object_type: list
+    current_obj: int
+
+    # written database information
     db_path: str
-    db_columns: list
+    db_tables: list
+    db_columns: list[list]
 
     # retriever node
     retrieved_docs: list

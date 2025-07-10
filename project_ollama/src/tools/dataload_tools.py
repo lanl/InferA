@@ -29,46 +29,27 @@ import genericio as gio
 
 logger = logging.getLogger(__name__)
 
-# Ensure the working directory exists
-if not os.path.exists(WORKING_DIRECTORY):
-    os.makedirs(WORKING_DIRECTORY)
-    logger.info(f"Created working directory: {WORKING_DIRECTORY}")
-
-
-def normalize_path(file_path: str) -> str:
-    """
-    Normalize file path for cross-platform compatibility.
-    
-    Args:
-    file_path (str): The file path to normalize
-    
-    Returns:
-    str: Normalized file path
-    """
-    if WORKING_DIRECTORY not in file_path:
-        file_path = os.path.join(WORKING_DIRECTORY, file_path)
-    return os.path.normpath(file_path)
-
 
 @tool(parse_docstring=True)
-def load_to_db(columns: list, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
-# def load_to_db(columns: list):
+def load_to_db(columns: list, object_type: str, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
     """
-    Load selected columns from multiple simulation files into a DuckDB database.
-    This tool reads specific columns from multiple time-stepped simulation files,
-    enriches them with metadata (simulation ID, time step, object), and writes the combined 
-    data to a local DuckDB database file. Example: Call this tool to prepare and consolidate data for downstream querying.
+    This tool reads specific columns from multiple time-stepped simulation files for only one object,
+    enriches it with metadata (simulation ID, time step, object), and writes the data to a local DuckDB database file. 
+    Example: If given the task "Load halo data", run with columns for haloproperties (including fof_halo_tag the unique identifier).
 
     Args:
         columns: A list of column names to extract from the data files.
+        object_type: A single object_type being loaded to the database.
 
     Returns:
         str: Path to the written database file for downstream querying.
     """
     file_index = state.get("file_index", None)
     session_id = state.get("session_id", None)
-    # file_index = {0: {498: {'haloproperties': '/vast/projects/exasky/data/hacc/SCIDAC_RUNS/128MPC_RUNS_FLAMINGO_DESIGN_3B/FSN_0.5387_VEL_149.279_TEXP_9.613_BETA_0.8710_SEED_9.548e5/analysis/m000p-498.haloproperties'}}}
-    # session_id = None
+    state_key = state.get("state_key", "")
+
+    db_columns = state.get("db_columns", [])
+    db_tables = state.get("db_tables", [])
 
     if not isinstance(columns, list) or not columns:
         raise ValueError("MissingColumnListError: You must provide a non-empty list of columns to extract.")
@@ -76,12 +57,9 @@ def load_to_db(columns: list, state: Annotated[dict, InjectedState], tool_call_i
         raise ValueError("MissingFileIndexError: The file index is missing from state. Use the DataLoader to extract relevant files.")
 
     if session_id:
-        DUCKDB_DIRECTORY = f"{WORKING_DIRECTORY}{session_id}.duckdb"
+        DUCKDB_DIRECTORY = f"{WORKING_DIRECTORY}{state_key}/{session_id}.duckdb"
     else:
-        DUCKDB_DIRECTORY = f"{WORKING_DIRECTORY}data.duckdb"
-
-    # Ensure output directory exists
-    os.makedirs(os.path.dirname(DUCKDB_DIRECTORY), exist_ok=True)
+        DUCKDB_DIRECTORY = f"{WORKING_DIRECTORY}{state_key}/data.duckdb"
 
     # Write to DuckDB file
     try:
@@ -93,13 +71,14 @@ def load_to_db(columns: list, state: Annotated[dict, InjectedState], tool_call_i
     table_initialized = False
     
     total_files = sum(len(file_index[sim][ts]) for sim in file_index for ts in file_index[sim])
-    logger.info(f"[load_to_db() TOOL] Writing file index to db. Total files to write: {total_files}")
+    logger.info(f"[load_to_db() TOOL] Writing file index to db. Total files to write: {total_files}\n       Using columns: {columns}")
 
     all_files = [
         (sim, ts, obj, file_path)
         for sim in file_index
         for ts in file_index[sim]
         for obj, file_path in file_index[sim][ts].items()
+        if obj == object_type
     ]
 
     iterator = tqdm(all_files, desc= "Loading files") if total_files > 10 else all_files
@@ -124,16 +103,17 @@ def load_to_db(columns: list, state: Annotated[dict, InjectedState], tool_call_i
 
         try:
             if not table_initialized:
-                con.execute("CREATE OR REPLACE TABLE data AS SELECT * FROM df")
+                con.execute(f"CREATE OR REPLACE TABLE {object_type} AS SELECT * FROM df")
                 table_initialized = True
             else:
-                con.execute("INSERT INTO data SELECT * FROM df")
+                con.execute(f"INSERT INTO {object_type} SELECT * FROM df")
         except Exception as e:
             raise RuntimeError(f"DatabaseWriteError: Failed writing to DuckDB from file {file_path}. Error: {e}")
 
     try:
-        columns = con.table("data").columns
-        df = con.sql("SELECT * FROM data").df()
+        columns = con.table(f"{object_type}").columns
+        df = con.sql(f"SELECT * FROM {object_type}").df()
+        pretty_print_df(df, max_rows = 5)
     except Exception as e:
         raise RuntimeError(f"DatabaseReadError: Failed to finalize or read from DuckDB. Error: {e}")
     finally:
@@ -141,12 +121,15 @@ def load_to_db(columns: list, state: Annotated[dict, InjectedState], tool_call_i
 
     logger.info("[load_to_db() TOOL] Done writing to DB. Connection closed.")
 
+    db_columns.append(columns)
+    db_tables.append(object_type)
     return Command(update={
         "db_path": DUCKDB_DIRECTORY,
-        "db_columns" : columns,
+        "db_tables": db_tables,
+        "db_columns" : db_columns,
         "messages": [
             ToolMessage(
-                f"Wrote all data to {DUCKDB_DIRECTORY}. TABLE = 'data', Columns = {columns} All dataframes concatenated via: full_df = pd.concat(all_dfs, ignore_index=True)",
+                f"Wrote all data to {DUCKDB_DIRECTORY}. TABLE = '{object_type}', Columns = {columns} All dataframes concatenated via: full_df = pd.concat(all_dfs, ignore_index=True)",
                 tool_call_id=tool_call_id,
             )
         ]

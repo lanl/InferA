@@ -79,20 +79,19 @@ class Node(NodeBase):
         self.write_prompt = (
             "You are a data ingestion agent. Your job is to determine which columns from a dataset should be written to a database.\n\n"
             "The user has given you this task:\n"
-            "{task}\n\n" \
-            "" \
-            "{description}"\
-            "" \
+            "{task}\n\n"
+            "Here are the available files and a brief description of what is contained in each file:\n"
+            "{description}\n\n"
             "Below is the context with available column names and their descriptions:\n"
             "{context}\n\n"
-            "Your goal is to:\n"
+            ""
+            "**Your goal is to:**\n"
             "1. Analyze the task.\n"
-            "2. Select only the columns that are relevant to the task.\n"
-            "3. Call the `load_to_db` tool using a list of column names as the only argument.\n\n"
-            "Always include a column that functions as a unique identifier. Use context of column names to determine which column to extract as the unique identifier.\n" \
-            "Note that the data that the user asks for may not be the name of the actual column in the database."
-            "If you are uncertain which columns are relevant, ask the user for clarification.\n"
-            "Do not include extra commentary. Only call the tool once you're confident in your selection."
+            "2. Identify columns related to the task for the object."
+            "3. Always include a column that functions as a unique identifier. Use the context of column names to determine which column to extract as the unique identifier.\n"
+            "4. Note that the data that the user asks for may not be the name of the actual column in the database.\n"
+            "5. If you are uncertain which columns are relevant, ask the user for clarification.\n"
+            "6. Do not include extra commentary. Only call the tool once you're confident in your selection."
         )
 
         self.write_prompt_template = PromptTemplate(
@@ -129,6 +128,7 @@ class Node(NodeBase):
         task = state["messages"]
         file_index = state.get("file_index", None)
         object_type = state.get("object_type", None)
+        current_obj = state.get("current_obj", 0)
 
         retrieved_docs = state.get("retrieved_docs", None)
         db_path = state.get("db_path", None)
@@ -164,9 +164,9 @@ class Node(NodeBase):
             return {"next": "Retriever", "current": "DataLoader", "messages": [AIMessage("Retrieving relevant columns. Sending to retriever node.")]}
         
         # If columns retrieved and file index present but no DB path yet, run writing chain        
-        if retrieved_docs and file_index and not db_path:
-            # Build description string for the files involved
-            obj_description = "\n".join(f"**File**: {obj}\n**Description**: {file_descriptions[obj]}" for obj in object_type)
+        if current_obj < len(object_type):
+            obj = object_type[current_obj]
+            obj_description = f"**File**: {obj}\n**Description**: {file_descriptions[obj]}"
 
             response = self.chain_write.invoke({
                 "task": task, 
@@ -177,16 +177,17 @@ class Node(NodeBase):
             # If writing agent called no tools, route to human feedback
             if not response.tool_calls:
                 logger.info(f"[DATALOADER] No tools called. Routing to human feedback for more info.")
-                return {"messages": [response], "next": "HumanFeedback", "current": "DataLoader"}
+                return {"messages": [response], "current_obj": current_obj, "next": "HumanFeedback", "current": "DataLoader"}
             else:
+                current_obj += 1
                 logger.info(f"[DATALOADER] Tool called.")
-                return {"messages": [response], "next": "DBWriter", "current": "DataLoader"}
+                return {"messages": [response], "current_obj": current_obj, "next": "DBWriter", "current": "DataLoader"}
         
         # If all required steps completed, signal success and move to Supervisor
         if retrieved_docs and file_index and db_path:
             logger.info(f"[DATALOADER] All dataloading tasks complete.")
             return {
-                "messages": [AIMessage(f"✅ \033[1;32mAll dataloading tasks completed. Loaded in necessary data, and wrote to {db_path}. SUCCESS: Move on to the next task.\033[0m")], 
+                "messages": [AIMessage(f"✅ \033[1;32mAll dataloading tasks completed. Loaded in necessary data, and wrote to: \n{db_path}\033[0m")], 
                 "next": "Supervisor", 
                 "current": "DataLoader"
             }

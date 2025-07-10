@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class Node(NodeBase):
     def __init__(self, llm, tools):
         super().__init__("Supervisor")
-        self.llm = llm.bind_tools(tools)
+        self.llm = llm.bind_tools(tools, tool_choice = "redirect")
         self.system_prompt = """
             As a supervisor for a data analysis project and an expert in cosmology simulations, your role is to coordinate a team of specialized agents to process and analyze large-scale cosmology simulation data using tools like pandas and SQL.
 
@@ -30,6 +30,7 @@ class Node(NodeBase):
             - Visualization: Creates clear, insightful visual representations of the analyzed data.
             - HumanFeedback: Requests more information from the user if task details are unclear or missing.
             - Summary: Summarizes results at the end of the task.
+            - END: You may redirect to END after all tasks are completed.
 
             ### SIMULATION STRUCTURE:
             - simulation/: Root directory with simulations under varied initial conditions.

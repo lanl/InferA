@@ -22,10 +22,13 @@ class Node(NodeBase):
         # Based on user feedback, revise plan or continue to steps       
         task = state["task"]
         session_id = state.get("session_id", "")
+        state_key = state.get("state_key", "")
         
-        db_path = state.get("db_path", None)
         object_type = state.get("object_type", None)
+
+        db_path = state.get("db_path", None)
         db_columns = state.get("db_columns", None)
+        db_tables = state.get("db_tables", None)
 
         results_list = state.get("results_list", [])
         df_index = state.get("df_index", 0)
@@ -36,17 +39,27 @@ class Node(NodeBase):
                     "current": "SQLProgrammer", 
                     "messages": [AIMessage("Database is missing. Check with DataLoader to verify.")]
                 }
+        if not db_tables:
+            logger.info(f"[SQL PROGRAMMER] Database has no tables. Routing back to supervisor.")       
+            return {"next": "Supervisor", 
+                    "current": "SQLProgrammer", 
+                    "messages": [AIMessage("Database has no tables. Check with DataLoader to verify.")]
+                }
         
         try:
-            logger.info(f"[SQL PROGRAMMER] SQL Query inputs:\n   - TASK: {task}\n   - Columns: {db_columns}\n   - object_type: {object_type}\n")
-            response = self.generate_sql.invoke({"task": task, "columns": db_columns, "object_type": object_type})
+            table_descriptions = ""
+            for i, table_name in enumerate(db_tables):
+                table_descriptions += f"Table: {table_name}\nColumns in {table_name}: {', '.join(db_columns[i])}\n\n"
+
+            logger.info(f"[SQL PROGRAMMER] SQL Query inputs:\n   - TASK: {task}\n\n{table_descriptions}")
+            response = self.generate_sql.invoke({"task": task, "table_descriptions": table_descriptions})
             sql_query = response['sql']
             explanation = response['explanation']
             logger.info(f"[SQL PROGRAMMER] Generated SQL: {sql_query}\n\n{explanation}")
 
             # Execute SQL query
             db = duckdb.connect(db_path)
-            sql_response = db.sql(response['sql']).df()
+            sql_response = db.sql(sql_query).df()
             db.close()
 
             if sql_response.empty:
@@ -55,15 +68,28 @@ class Node(NodeBase):
                 diagnostic_msg = f"Columns: {db_columns}\n\n{warning_msg}\n\nSQL: {sql_query}"
             else:
                 print("SQL Filtered data:")
-                pp_df = pretty_print_df(sql_response, return_output = True)
+                pp_df = pretty_print_df(sql_response, return_output = True, max_rows = 5)
                 
-                csv_output = f"{WORKING_DIRECTORY}{session_id}_{df_index}.csv"
+                csv_output = f"{WORKING_DIRECTORY}{state_key}/{session_id}_{df_index}.csv"
                 logger.info(f"\033[44m[SQL PROGRAMMER] Writing dataframe result to {csv_output}.\033[0m")
                 sql_response.to_csv(csv_output, index= False)
 
                 df_index += 1
                 results_list.append((csv_output, explanation))
+                try:
+                    with open(f"{WORKING_DIRECTORY}{state_key}/{session_id}_{df_index}.sql") as file:
+                        # Write the explanations
+                        file.write("# Explanations\n")
+                        file.write(explanation)
+                        file.write("\n\n")
 
+                        # Write the SQL query
+                        file.write("# SQL Query\n")
+                        file.write(sql_query)
+                        file.write("\n")
+                    df_index += 1
+                except Exception as e:
+                    logger.error(f"[SQL PROGRAMMER] Failed to write SQL query to file. Error: {e}")
                 return {
                     "next": "QA",
                     "current": "SQLProgrammer",
@@ -117,21 +143,20 @@ class Node(NodeBase):
             "Task:"
             "{task}"
             ""
-            "Columns in Database:"
-            "{columns}"
-            "" 
-            "Object in object_type column:"
-            "{object_type}"
+            "{table_descriptions}"
             ""
             "Instructions:\n"
-            "- Query only the 'data' table.\n"
+            "- The table names and columns for each table are given above.\n"
+            "- Try your best to join tables using matching unique identifier columns - usually fof_halo_tag or gal_tag."
             "- Select only the columns that are relevant to the task.\n"
             "- Never use SELECT * — be explicit about which columns to return.\n"
             "- Optionally ORDER BY a meaningful column (e.g., mass, velocity) to get significant examples.\n"
             "- NEVER make data modifications (no INSERT, UPDATE, DELETE, DROP, etc.).\n"
+            "- Do not rename the columns."
             "- Always ensure your SQL is valid {dialect} syntax.\n"
             "- Only generate a SQL query — do not explain, comment, or return anything else.\n\n"
             "- If the task requires it, you may provide multiple independent SQL queries using a semi-colon as a separator."
+            "- Table name is ALWAYS the same as object_type. Make sure table = object_type."
             ""
             "{format_instructions}"
             ""
@@ -140,7 +165,7 @@ class Node(NodeBase):
 
         prompt_template = PromptTemplate(
             template = system_prompt,
-            input_variables=["task", "columns", "object_type"],
+            input_variables=["task", "table_descriptions"],
             partial_variables={"dialect": "PostgreSQL", "format_instructions": output_parser.get_format_instructions()},
         )
 

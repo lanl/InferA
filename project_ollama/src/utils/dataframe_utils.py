@@ -50,6 +50,10 @@ def pretty_print_df(
     table_str = tabulate(df_final, headers='keys', tablefmt=tablefmt, showindex=False)
     output_lines.append(table_str)
 
+    # Add indication if there are more rows than displayed
+    if len(df) > max_rows:
+        output_lines.append(f"... (showing {max_rows} of {len(df)} rows)\n")
+
     final_output = "\n".join(output_lines)
 
     if return_output:
@@ -102,6 +106,10 @@ def pretty_print_dict(
 
     table_str = tabulate(adjusted_items, headers=["Key", "Value"], tablefmt=tablefmt, showindex=False)
     output_lines.append(table_str)
+
+    # Add indication if there are more rows than displayed
+    if len(data) > max_items:
+        output_lines.append(f"\n... (showing {max_items} of {len(data)} rows)")
 
     final_output = "\n".join(output_lines)
 

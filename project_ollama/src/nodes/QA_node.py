@@ -63,37 +63,15 @@ class Node(NodeBase):
         stashed_msg = state.get("stashed_msg", "")
         qa_retries = state.get("qa_retries", 0)
 
-        max_retries = 1
+        reset_retry = True
+        max_retries = 3
         threshold = 50
-
-        # requirements = ""
-        # if previous_node == "SQLProgrammer":
-        #     requirements = '''
-        #         "- Query only the 'data' table.\n"
-        #         "- Select only the columns that are relevant to the task.\n"
-        #         "- Never use SELECT * — be explicit about which columns to return.\n"
-        #         "- Optionally ORDER BY a meaningful column (e.g., mass, velocity) to get significant examples.\n"
-        #         "- NEVER make data modifications (no INSERT, UPDATE, DELETE, DROP, etc.).\n"
-        #         "- Always ensure your SQL is valid {dialect} syntax.\n"
-        #         "- Only generate a SQL query — do not explain, comment, or return anything else.\n\n"
-        #         '''
-        # if previous_node == "PythonProgrammer":
-        #     requirements = '''
-        #         ***STRICT RULES (Always Follow These):***
-        #         - ❌ NEVER import any libraries (no `import pandas`, `import numpy`, etc.).
-        #         - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
-        #         - ✅ ALWAYS assign the final result to a single DataFrame named `result_df`.
-        #         - ❌ NEVER use loops, file I/O, or print statements.
-        #         - ✅ Use only pandas and numpy operations.
-        #         - ✅ If the user’s task applies to only part of the DataFrame, return just the relevant rows or columns.
-        #     '''
 
         response = self.chain.invoke({
             'message': task, 
             'member': previous_node, 
             'stashed_msg': stashed_msg, 
             "threshold": threshold,
-            # "requirements": requirements
         })
 
         try:

@@ -1,3 +1,4 @@
+import os
 import re
 import json
 import logging
@@ -23,13 +24,18 @@ class Node(NodeBase):
         super().__init__("Python")
         self.llm = llm
         self.generate_code = self._generate_code()
+        self.session_id = None
+        self.state_key = None
     
     def run(self, state):
         task = state["task"]
-        session_id = state.get("session_id", "")
+        self.session_id = state.get("session_id", "")
+        self.state_key = state.get("state_key", "")
+
         db_path = state.get("db_path", None)
         results_list = state.get("results_list", [])
         df_index = state.get("df_index", 0)
+
 
         # Aggregate all explanations for previous dfs
         explanations = self._aggregate_explanations(results_list)
@@ -53,12 +59,11 @@ class Node(NodeBase):
         except Exception as e:
             return self._error_response(f"LLM failed to generate code: {e}")
 
-
+        import_code = response.get("imports", "")
         python_code = self.extract_code_block(response.get("python_code", ""))
-
         explanation = response.get("explanation", "")
+
         logger.info(f"[PYTHON PROGRAMMER] Generated pandas code:\n{python_code}\nExplanation:\n{explanation}")
-            
         # Execute the code safely from fastAPI server
         try:
             result = pd.DataFrame.from_dict(query_dataframe_agent(df, python_code))
@@ -66,7 +71,7 @@ class Node(NodeBase):
             logger.error(f"Execution error: {e}")
             return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}.")
     
-        return self._handle_result(result, python_code, df_index, results_list, explanation, session_id)
+        return self._handle_result(result, python_code, explanation, import_code, df_index, results_list)
 
 
     def _load_dataframe(self, results_list, db_path):
@@ -120,7 +125,11 @@ class Node(NodeBase):
     
 
     def _generate_code(self):
-        pandas_schema = [
+        python_schema = [
+            ResponseSchema(
+                name="imports",
+                description="Code Block import statements"
+            ),
             ResponseSchema(
                 name="python_code", 
                 description="Python code using pandas to process or analyze the input DataFrame, input_df."
@@ -130,7 +139,7 @@ class Node(NodeBase):
                 description="Brief explanation of what the code is doing."
             ),
         ]
-        output_parser = StructuredOutputParser.from_response_schemas(pandas_schema)
+        output_parser = StructuredOutputParser.from_response_schemas(python_schema)
 
         system_prompt = (
             """
@@ -138,19 +147,12 @@ class Node(NodeBase):
             Your task is to transform a pandas DataFrame named `input_df` based on user instructions. 
 
             ***STRICT RULES (Always Follow These):***
-            - ❌ NEVER import any libraries (no `import pandas`, `import numpy`, etc.).
             - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
             - ✅ ALWAYS assign the final result to a single DataFrame named `result`.
             - ❌ NEVER use loops, file I/O, or print statements.
             - ✅ Use only pandas and numpy operations.
             - ✅ If the user’s task applies to only part of the DataFrame, return just the relevant rows or columns.
-
-            ***Incorrect example (Do NOT do this):***
-            ``` # Must add python code block
-            import pandas as pd # Do not import libraries
-            
-            result = ...
-            ```
+            - ❌ Do not rename the columns in the dataframe.
 
             First, think step-by-step about how to perform the task using pandas/numpy.
             Then, return only the final code inside a Python code block.
@@ -191,7 +193,7 @@ class Node(NodeBase):
         return prompt_template | self.llm | output_parser
     
 
-    def _handle_result(self, result, python_code, df_index, results_list, explanation, session_id):
+    def _handle_result(self, result, python_code, explanation, import_code, df_index, results_list):
         """
         Process the result returned by executing the generated pandas code.
         """
@@ -200,7 +202,7 @@ class Node(NodeBase):
                 return self._error_response(error_str)
         
         elif isinstance(result, pd.DataFrame):
-            return_file = f"{WORKING_DIRECTORY}{session_id}_{df_index}.csv"
+            return_file = f"{WORKING_DIRECTORY}{self.state_key}/{self.session_id}_{df_index}.csv"
             logger.info(f"\033[44m[PYTHON PROGRAMMER] Writing dataframe to {return_file}\033[0m")
             result.to_csv(return_file, index=False)
             df_index += 1
@@ -213,7 +215,33 @@ class Node(NodeBase):
             pretty_output = pretty_print_dict(result, return_output=True)
         else:
             pretty_output = str(result)
+
         stashed_msg = f"Python code\n{python_code}\n\nOutput:\n{pretty_output}"
+
+        try:
+            file_path = os.path.join(WORKING_DIRECTORY, self.state_key, f"{self.session_id}_{df_index}.py")
+            
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path) as file:
+                # Write the imports
+                file.write("# Imports\n")
+                file.write(str(import_code))
+                file.write("\n\n")
+
+                # Write the explanations
+                file.write("# Explanations\n")
+                file.write(str(explanation))
+                file.write("\n\n")
+
+                # Write the Python code
+                file.write("# Python Code\n")
+                file.write(str(python_code))
+                file.write("\n")
+                
+            df_index += 1
+        except Exception as e:
+            logger.error(f"[PYTHON PROGRAMMER] Failed to write python code to file. Error: {e}")
+
         return {
             "next": "QA",
             "current": "PythonProgrammer",

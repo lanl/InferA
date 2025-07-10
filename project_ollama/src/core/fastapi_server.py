@@ -8,6 +8,8 @@ import pyvista as pv
 import logging
 import builtins
 
+from src.utils.dataframe_utils import pretty_print_df
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
@@ -49,7 +51,7 @@ async def query_agent(request: Request, pandas_code: str = Form(...), file: Uplo
         
         # Convert the result to a JSON-serializable format
         if isinstance(result, pd.DataFrame):
-            logger.info(f"[SANDBOX SERVER]      - Result DataFrame shape: {result.shape}\n\nResult:\n{result}")
+            logger.info(f"[SANDBOX SERVER]      - Result DataFrame shape: {result.shape}\n")
             response = result.to_dict(orient='records')
             # response = result.to_dict(orient='list')
         elif isinstance(result, pd.Series):

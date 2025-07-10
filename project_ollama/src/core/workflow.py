@@ -220,7 +220,8 @@ class WorkflowManager:
                 "PythonProgrammer": "PythonProgrammer",
                 "Visualization": "Visualization",
                 "Summary": "Summary",
-                "HumanFeedback": "HumanFeedback"
+                "HumanFeedback": "HumanFeedback",
+                "END": END
             }
         )
 

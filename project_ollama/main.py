@@ -25,6 +25,7 @@ class MultiAgentSystem:
 
         self.session = session
         self.step = step
+        self.state_key = f"{self.session}_{self.step}"
         self.state_dict = {}
 
         self.setup_environment()
@@ -46,10 +47,14 @@ class MultiAgentSystem:
         if not os.path.exists(WORKING_DIRECTORY):
             os.makedirs(WORKING_DIRECTORY)
             self.logger.info(f"Created working directory: {WORKING_DIRECTORY}")
+        
+        if not os.path.exists(f"{WORKING_DIRECTORY}{self.state_key}/"):
+            os.makedirs(f"{WORKING_DIRECTORY}{self.state_key}/")
+            self.logger.info(f"Created state file storage directory: {WORKING_DIRECTORY}{self.state_key}/")
 
         if not os.path.exists("./state/"):
             os.makedirs("./state/")
-            self.logger.info(f"Created state storage directory: ./state/")
+            self.logger.info(f"Created state dictionary directory: ./state/")
         
         # load previous state if it exists
         try:
@@ -68,30 +73,34 @@ class MultiAgentSystem:
 
 
     def cleanup(self):
-        # Save readable log
-        with open(STATE_DICT_PATH, "wb") as f:
-            pickle.dump(self.state_dict, f)
-            self.logger.info(f"[SESSION] All streamed steps saved to {STATE_DICT_PATH}.")
-            print(f"[SESSION] All streamed steps saved to {STATE_DICT_PATH}.")
+        if self.step == "-1":
+            self.logger.info(f"[SESSION] Steps set to '-1'. Disabled saving.")
+            print(f"[SESSION] Steps set to '-1'. Disabled saving.")
+        else:
+            # Save readable log
+            with open(STATE_DICT_PATH, "wb") as f:
+                pickle.dump(self.state_dict, f)
+                self.logger.info(f"[SESSION] All streamed steps saved to {STATE_DICT_PATH}.")
+                print(f"[SESSION] All streamed steps saved to {STATE_DICT_PATH}.")
         
         
     def run(self, user_input: str) -> None:
-        session_id = f"{self.session}_{self.step}"
-        config = {"configurable": {"thread_id": session_id}, "recursion_limit": 50}
+        state_key = self.state_key
+        config = {"configurable": {"thread_id": state_key}, "recursion_limit": 50}
 
-        if session_id not in self.state_dict:
-            self.state_dict[session_id] = {
+        if state_key not in self.state_dict:
+            self.state_dict[state_key] = {
                 "session_id": self.session,
-                "step": self.step,
+                "state_key": state_key,
                 "messages": [user_input],
                 "user_inputs": [user_input],
                 "next": "Planner"
             }
         else:
-            self.logger.info(f"[SESSION] Starting previous session from node: {self.state_dict[session_id]['next']}")
+            self.logger.info(f"[SESSION] Starting previous session from node: {self.state_dict[state_key]['next']}")
 
             # Print entire state dictionary
-            for k, v in self.state_dict[session_id].items():
+            for k, v in self.state_dict[state_key].items():
                 # Format the value nicely, you can customize this if v is complex
                 if k in ["messages", "user_input", "stashed_msg", "retrieved_docs", "db_columns", "file_index"]:
                     continue
@@ -122,7 +131,7 @@ class MultiAgentSystem:
 
         try:
             for k, v in graph.stream(
-                self.state_dict[session_id], config,
+                self.state_dict[state_key], config,
                 stream_mode = ["values", "updates"]
             ):  
                 try:
@@ -132,12 +141,17 @@ class MultiAgentSystem:
                         self.logger.info(pretty_print_messages(v, last_message=True))
                     if k == "values":
                         # Save each step as a new key in state_dict
-                        state_key = f"{self.session}_{step_counter}"
-                        self.state_dict[state_key] = v
+                        new_state_key = f"{self.session}_{step_counter}"
+                        self.state_dict[new_state_key] = v
 
                         step_counter += 1
-                        self.logger.info(f"State saved to : {state_key}.")
-                        print(f"State saved to : {state_key}.")
+
+                        if self.step != -1:
+                            self.logger.info(f"State saved to : {new_state_key}.")
+                            print(f"State saved to : {new_state_key}.")
+                        else:
+                            self.logger.info(f"Step save disabled.")
+                            print(f"Step save disabled.")
 
                 except Exception as e:
                     self.logger.error(f"Unable to print message {k}:{v}. {e}")
@@ -148,8 +162,8 @@ class MultiAgentSystem:
 
 
 def main():
-    session = "123"
-    step = "29"
+    session = "138"
+    step = "0"
     # session_id = None
     system = MultiAgentSystem(session = session, step = step)
 
@@ -157,14 +171,15 @@ def main():
 
     # user_input = "Can you help me plot the change in mass of the largest friends-of-friends halos for all timesteps in simulation 0?"
     # user_input = "Can you find me the top 20 largest friends-of-friends halos from timestep 498 in simulation 0?"
-    user_input = "I want to visualize the top 20 largest friends-of-friends halos from timestep 498 in simulation 0?"
+    user_input = "I want to visualize the top 20 largest friends-of-friends halos from timestep 498 in simulation 0? Use the halo center as coordinates for visualization."
     # user_input = "Find me the 10 friends-of-friends halos closest in coordinates to the halo with fof_halo_tag = '251375070' in timestep 498 of simulation 0. Use columns 'fof_halo_tag', 'fof_halo_center_x', 'fof_halo_center_y', 'fof_halo_center_z'."
     # user_input = "Can you map out the largest friends-of-friends halos for all timesteps in simulation 0?"
-    # user_input = "What are the top 10 largest galaxies in halo with fof_halo_tag = '251375070' in timestep 498 of simulation 0?"
-    # user_input = ""
+    # user_input = "What are the top 10 largest galaxies in the largest halo in timestep 498 of simulation 0?"
+    # user_input = "Can you plot the time series change over time of the largest galaxy in simulation 2?"
     # user_input = "Can you plot a vtk of all the halos within 10 Mpc of the largest halo at timestep 498 of simulation 0?"
     # user_input = "Can you plot a timeseries pvd for all the largest halos at every timestep in simulation 0? At each timestep also include every halo within a distance of 10 Mpc."
     # user_input = "Visualize all halos within 10 Mpc of the coordinate (20,20,20) for timestep 498 of simulation 0."
+    # user_input = "Across all simulations, what is the average fof_halo_count of halos at the highest timestep?"
     
     system.run(user_input)
 
