@@ -7,6 +7,8 @@ exports/*
 genericio/*
 cache/*
 state/state.pkl
+venv_*
+cache
 
 data_storage/*
 !data_storage/.placeholder

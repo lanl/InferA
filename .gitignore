@@ -28,7 +28,7 @@ MANIFEST
 
 # Virtual environment
 remote_gio_explorer/*
-project_ollama/venv_project_ollama
+venv_*
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
