@@ -1,3 +1,4 @@
+import os
 import logging
 import duckdb
 
@@ -34,13 +35,13 @@ class Node(NodeBase):
         df_index = state.get("df_index", 0)
 
         if not db_path:
-            logger.info(f"[SQL PROGRAMMER] Database has not been written. Routing back to supervisor.")       
+            logger.warning(f"[SQL PROGRAMMER] Database has not been written. Routing back to supervisor.")       
             return {"next": "Supervisor", 
                     "current": "SQLProgrammer", 
                     "messages": [AIMessage("Database is missing. Check with DataLoader to verify.")]
                 }
         if not db_tables:
-            logger.info(f"[SQL PROGRAMMER] Database has no tables. Routing back to supervisor.")       
+            logger.warning(f"[SQL PROGRAMMER] Database has no tables. Routing back to supervisor.")       
             return {"next": "Supervisor", 
                     "current": "SQLProgrammer", 
                     "messages": [AIMessage("Database has no tables. Check with DataLoader to verify.")]
@@ -51,11 +52,11 @@ class Node(NodeBase):
             for i, table_name in enumerate(db_tables):
                 table_descriptions += f"Table: {table_name}\nColumns in {table_name}: {', '.join(db_columns[i])}\n\n"
 
-            logger.info(f"[SQL PROGRAMMER] SQL Query inputs:\n   - TASK: {task}\n\n{table_descriptions}")
+            logger.info(f"[SQL PROGRAMMER] SQL Query inputs:\n\nTASK: {task}\n\n{table_descriptions}\n\n")
             response = self.generate_sql.invoke({"task": task, "table_descriptions": table_descriptions})
             sql_query = response['sql']
             explanation = response['explanation']
-            logger.info(f"[SQL PROGRAMMER] Generated SQL: {sql_query}\n\n{explanation}")
+            logger.info(f"[SQL PROGRAMMER] Generated SQL: \n\n\033[1;30;47m{sql_query}\n\n{explanation}\033[0m\n\n")
 
             # Execute SQL query
             db = duckdb.connect(db_path)
@@ -67,7 +68,6 @@ class Node(NodeBase):
                 logger.warning(warning_msg)
                 diagnostic_msg = f"Columns: {db_columns}\n\n{warning_msg}\n\nSQL: {sql_query}"
             else:
-                print("SQL Filtered data:")
                 pp_df = pretty_print_df(sql_response, return_output = True, max_rows = 5)
                 
                 csv_output = f"{WORKING_DIRECTORY}{state_key}/{session_id}_{df_index}.csv"
@@ -77,16 +77,22 @@ class Node(NodeBase):
                 df_index += 1
                 results_list.append((csv_output, explanation))
                 try:
-                    with open(f"{WORKING_DIRECTORY}{state_key}/{session_id}_{df_index}.sql") as file:
+                    file_path = os.path.join(WORKING_DIRECTORY, state_key, f"{session_id}_{df_index}.sql")
+
+                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                    logger.debug(f"[VISUALIZATION] Ensured directory exists: {os.path.dirname(file_path)}")
+
+                    with open(file_path, 'w') as file:
                         # Write the explanations
-                        file.write("# Explanations\n")
-                        file.write(explanation)
+                        file.write("-- Explanations\n")
+                        file.write("--" + str(explanation))
                         file.write("\n\n")
 
                         # Write the SQL query
-                        file.write("# SQL Query\n")
+                        file.write("-- SQL Query\n")
                         file.write(sql_query)
                         file.write("\n")
+
                     df_index += 1
                 except Exception as e:
                     logger.error(f"[SQL PROGRAMMER] Failed to write SQL query to file. Error: {e}")

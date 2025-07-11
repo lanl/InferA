@@ -9,7 +9,9 @@ logger = logging.getLogger(__name__)
 
 class FormattedReview(TypedDict):
     score: int = Field(..., description="A numeric grade to the output between 1 and 100 that reflects how well the output fulfills the task requirements.")
-    task: str = Field(..., description="A string clearly identifying what is missing, incorrect, or poorly executed in the output.")
+    critique: str = Field(..., description="Clearly identifies what is missing, incorrect, or poorly executed in the output.")
+    revisions: str = Field(..., description="Clearly list revisions necessary to the output.")
+    example: str = Field(..., description="Provides a brief example of what changes could be made to the output.")
 
 class Node(NodeBase):
     def __init__(self, llm):
@@ -32,12 +34,12 @@ class Node(NodeBase):
 
             "### RESPONSE FORMAT:\n"
             "1. Clearly identify only what is missing, incorrect, or poorly executed in the previous response.\n"
-            "2. Provide a precise description that outlines the necessary corrections or improvements.\n"
+            "2. Provide a brief description that outlines the necessary revisions or improvements.\n"
             "3. Highlight any critical areas where the agent must pay special attention, such as edge cases, data handling, assumptions, or formatting.\n"
             "4. If revisions are required, please provide clear, actionable feedback that directly revises the agent's output.\n"
             "5. Include the numeric grade between 1 and 100 that reflects how well the output fulfills the task requirements.\n"
             "6. Do NOT include any explanations, commentary, or extraneous text outside the prescribed response.\n"
-            "7/ If code was given to you, respond with specific changes to that code that are needed.\n"
+            "7/ If code was given to you, respond with an example of specific changes to that code that are needed.\n"
 
             "---\n"
             "### CONTEXT TO REVIEW:\n"
@@ -76,15 +78,21 @@ class Node(NodeBase):
 
         try:
             score = int(response.get("score", 0))
-            revised_task = response.get("task", "")
+            critique = response.get("critique", "")
+            revisions = response.get("task", "")
+            example = response.get("example", "")
+
         except Exception as e:
             logger.error(f"Failed to parse QA response JSON: {e}")
             score = 0
-            revised_task = ""
+            critique = ""
+            revisions = ""
+            example = ""
 
         if score < threshold:
-            revised_task = f"**INITIAL TASK:**\n{task}\n\n**YOUR LAST OUTPUT**\n{stashed_msg}\n\n**REVISIONS NEEDED:**{revised_task}"
-            logger.info(revised_task)
+            revised_task = f"**INITIAL TASK:**\n{task}\n\n**Critiques:**\n{critique}\n\n**REVISIONS NEEDED:**\n{revisions}\n\n**Example:\n{example}\n\n"
+            logger.info(f"Critiques:\n{critique}\n\nRevisions:\n{revisions}\n\n")
+            logger.debug(revised_task)
             qa_retries += 1
             if qa_retries > max_retries:
                 return {

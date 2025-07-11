@@ -21,6 +21,7 @@ uvicorn
 python-multipart
 tabulate
 asyncio
+duckdb
 # pandasai
 
 pandas

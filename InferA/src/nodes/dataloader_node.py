@@ -149,18 +149,18 @@ class Node(NodeBase):
 
             # If no tools were called, fallback to human feedback for more info
             if not response.tool_calls:
-                logger.info(f"[DATALOADER] No tools called. Routing to human feedback for more info.")
+                logger.warning(f"[DATALOADER] No tools called. Routing to human feedback for more info.")
                 return {"messages": [response], "next": "HumanFeedback", "current": "DataLoader"}
             else:
-                logger.info(f"[DATALOADER] Tool called.")
+                logger.debug(f"[DATALOADER] Tool called.")
                 return {"messages": [response], "next": "DataLoaderTool", "current": "DataLoader"}
 
         # If documents not retrieved yet, route to retriever node
         if not retrieved_docs:
             if not object_type:
-                logger.info(f"[DATALOADER] Column names not retrieved yet. Routing to retriever node. No object_type found, retrieving from all docs.") 
+                logger.debug(f"[DATALOADER] Column names not retrieved yet. Routing to retriever node. No object_type found, retrieving from all docs.") 
             else:
-                logger.info(f"[DATALOADER] Column names not retrieved yet. Routing to retriever node.")       
+                logger.debug(f"[DATALOADER] Column names not retrieved yet. Routing to retriever node.")       
             return {"next": "Retriever", "current": "DataLoader", "messages": [AIMessage("Retrieving relevant columns. Sending to retriever node.")]}
         
         # If columns retrieved and file index present but no DB path yet, run writing chain        
@@ -176,16 +176,16 @@ class Node(NodeBase):
 
             # If writing agent called no tools, route to human feedback
             if not response.tool_calls:
-                logger.info(f"[DATALOADER] No tools called. Routing to human feedback for more info.")
+                logger.warning(f"[DATALOADER] No tools called. Routing to human feedback for more info.")
                 return {"messages": [response], "current_obj": current_obj, "next": "HumanFeedback", "current": "DataLoader"}
             else:
                 current_obj += 1
-                logger.info(f"[DATALOADER] Tool called.")
+                logger.debug(f"[DATALOADER] Tool called.")
                 return {"messages": [response], "current_obj": current_obj, "next": "DBWriter", "current": "DataLoader"}
         
         # If all required steps completed, signal success and move to Supervisor
         if retrieved_docs and file_index and db_path:
-            logger.info(f"[DATALOADER] All dataloading tasks complete.")
+            logger.debug(f"[DATALOADER] All dataloading tasks complete.")
             return {
                 "messages": [AIMessage(f"✅ \033[1;32mAll dataloading tasks completed. Loaded in necessary data, and wrote to: \n{db_path}\033[0m")], 
                 "next": "Supervisor", 

@@ -12,7 +12,7 @@ class Node(NodeBase):
     
     def run(self, state):
         previous_node = state.get("current", None)
-        print(previous_node)
+        logger.debug(previous_node)
         if DISABLE_FEEDBACK:
             if previous_node in ["Verifier"]:
                 return {"messages": [AIMessage("\033[1;31mSkipping human feedback. Sending directly to supervisor.\033[0m")], "next": "Supervisor", "current": "Verifier"}
@@ -21,8 +21,9 @@ class Node(NodeBase):
             else:
                 return {"messages": [AIMessage("\033[1;31mSkipping human feedback. Sending back to previous node.\033[0m")], "next": previous_node, "current": "HumanFeedback"}
             
-        print(f"--- Human feedback requested ---")
-        feedback = HumanMessage(input("\n\033[1m\033[31mPlease provide feedback:\033[0m\n"))
-
-        logger.info(f"[HUMAN FEEDBACK] feedback added to messages")
+        logger.info(f"--- Human feedback requested ---")
+        user_input = input("\n\033[1m\033[31mPlease provide feedback:\033[0m\n")
+        feedback = HumanMessage(user_input)
+        logger.debug(user_input)
+        logger.debug(f"[HUMAN FEEDBACK] feedback added to messages")
         return {"messages": [feedback], "user_inputs": [feedback], "next": previous_node, "current": "HumanFeedback"}

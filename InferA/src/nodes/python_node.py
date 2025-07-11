@@ -63,7 +63,7 @@ class Node(NodeBase):
         python_code = self.extract_code_block(response.get("python_code", ""))
         explanation = response.get("explanation", "")
 
-        logger.info(f"[PYTHON PROGRAMMER] Generated pandas code:\n{python_code}\nExplanation:\n{explanation}")
+        logger.info(f"[PYTHON PROGRAMMER] Generated pandas code:\n\n\033[1;30;47m{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
         # Execute the code safely from fastAPI server
         try:
             result = pd.DataFrame.from_dict(query_dataframe_agent(df, python_code))
@@ -79,7 +79,7 @@ class Node(NodeBase):
         Load dataframe either from CSV files in results_list or from a database.
         """
         if not results_list:
-            logger.info(f"[PYTHON PROGRAMMER] No dataframes from previous steps. Getting dataframe from db.")       
+            logger.warning(f"[PYTHON PROGRAMMER] No dataframes from previous steps. Getting dataframe from db.")       
             try:
                 db = duckdb.connect(db_path)
                 df = db.execute("SELECT * FROM data").fetchdf()
@@ -98,7 +98,7 @@ class Node(NodeBase):
                     logger.error("[PYTHON PROGRAMMER] No CSV files found in results_list.")
                     return None
                 combined_df = pd.concat(dfs)
-                logger.info(f"[PYTHON PROGRAMMER] Loaded and concatenated CSV dataframes.")
+                logger.debug(f"[PYTHON PROGRAMMER] Loaded and concatenated CSV dataframes.")
                 # pretty_print_df(combined_df)
                 return combined_df
 
@@ -207,12 +207,12 @@ class Node(NodeBase):
             result.to_csv(return_file, index=False)
             df_index += 1
             results_list.append((return_file, explanation))
-            pretty_output = pretty_print_df(result, return_output=True)
+            pretty_output = pretty_print_df(result, return_output=True, max_rows=5)
 
         elif isinstance(result, dict):
             df_index += 1
             results_list.append((f"python_{df_index}", result))
-            pretty_output = pretty_print_dict(result, return_output=True)
+            pretty_output = pretty_print_dict(result, return_output=True, max_items=5)
         else:
             pretty_output = str(result)
 
@@ -222,7 +222,9 @@ class Node(NodeBase):
             file_path = os.path.join(WORKING_DIRECTORY, self.state_key, f"{self.session_id}_{df_index}.py")
             
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path) as file:
+            logger.debug(f"[VISUALIZATION] Ensured directory exists: {os.path.dirname(file_path)}")
+
+            with open(file_path, 'w') as file:
                 # Write the imports
                 file.write("# Imports\n")
                 file.write(str(import_code))
@@ -230,7 +232,9 @@ class Node(NodeBase):
 
                 # Write the explanations
                 file.write("# Explanations\n")
+                file.write("'''")
                 file.write(str(explanation))
+                file.write("'''")
                 file.write("\n\n")
 
                 # Write the Python code

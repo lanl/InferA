@@ -87,8 +87,7 @@ class Node(NodeBase):
         if current_step > len(steps):
             return {"messages": [AIMessage("Completed analysis.")], "current": "Supervisor", "next": "END"}
         
-        logger.info(f"[SUPERVISOR] Starting step {current_step}...\n    - TASK: {steps[current_step-1]["description"]}\n")
-        print(f"\033[1;36m[SUPERVISOR] Starting step {current_step}...\n    - TASK: {steps[current_step-1]["description"]}\n\033[0m")
+        logger.info(f"\033[1;36m[SUPERVISOR] Starting step {current_step}...\n    - TASK: {steps[current_step-1]["description"]}\n\033[0m")
 
         # task to be sent to agents is updated in the tool along with the routing
         response = self.chain.invoke({'message': messages[-3:], 'current_step': current_step, "step": steps[current_step-1]["description"], 'plan': plan})

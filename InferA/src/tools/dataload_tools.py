@@ -67,11 +67,11 @@ def load_to_db(columns: list, object_type: str, state: Annotated[dict, InjectedS
     except Exception as e:
         raise RuntimeError(f"DatabaseConnectionError: Could not connect to DuckDB at {DUCKDB_DIRECTORY}. Error: {e}")
 
-    logger.info(f"[load_to_db() TOOL] Connected to database: {DUCKDB_DIRECTORY}")
+    logger.debug(f"[load_to_db() TOOL] Connected to database: {DUCKDB_DIRECTORY}")
     table_initialized = False
     
     total_files = sum(len(file_index[sim][ts]) for sim in file_index for ts in file_index[sim])
-    logger.info(f"[load_to_db() TOOL] Writing file index to db. Total files to write: {total_files}\n       Using columns: {columns}")
+    logger.debug(f"[load_to_db() TOOL] Writing file index to db. Total files to write: {total_files}\n       Using columns: {columns}")
 
     all_files = [
         (sim, ts, obj, file_path)
@@ -91,7 +91,7 @@ def load_to_db(columns: list, object_type: str, state: Annotated[dict, InjectedS
                 f"ColumnReadError: Failed to read columns {columns} from {file_path}. Likely cause: missing or misspelled column names. Error: {e}"
             )
         
-        if total_files <= 10:
+        if total_files <= 5:
             logger.info(f"\n- File: {file_path}")
 
         df = pd.DataFrame(np.column_stack(data), columns=columns)
@@ -119,7 +119,7 @@ def load_to_db(columns: list, object_type: str, state: Annotated[dict, InjectedS
     finally:
         con.close()
 
-    logger.info("[load_to_db() TOOL] Done writing to DB. Connection closed.")
+    logger.debug("[load_to_db() TOOL] Done writing to DB. Connection closed.")
 
     db_columns.append(columns)
     db_tables.append(object_type)

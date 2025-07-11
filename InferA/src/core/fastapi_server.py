@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 
+import vtk
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -20,7 +21,7 @@ def read_root():
 
 @app.post("/query/")
 async def query_agent(request: Request, pandas_code: str = Form(...), file: UploadFile = File(...)):
-    logger.info(f"[SANDBOX SERVER] Received pandas_code.")
+    logger.debug(f"[SANDBOX SERVER] Received pandas_code.")
     df = pd.read_csv(file.file)
     # Define the execution environment
     # Remove unsafe builtins
@@ -35,7 +36,8 @@ async def query_agent(request: Request, pandas_code: str = Form(...), file: Uplo
         'pd': pd,
         'np': np,
         'plt': plt,
-        'pv': pv
+        'pv': pv,
+        'vtk': vtk,
     }
     local_vars = {
         'input_df': df.copy()
@@ -46,12 +48,12 @@ async def query_agent(request: Request, pandas_code: str = Form(...), file: Uplo
         result = local_vars.get("result")
 
         # result = eval(pandas_code, {"df": df, "pd": pd})
-        logger.info(f"[SANDBOX SERVER] Pandas code executed successfully on dataframe.")
-        logger.info(f"[SANDBOX SERVER]      - Result type: {type(result)}")
+        logger.info(f"[SANDBOX SERVER] Pandas code executed successfully on server.")
+        logger.debug(f"[SANDBOX SERVER]      - Result type: {type(result)}")
         
         # Convert the result to a JSON-serializable format
         if isinstance(result, pd.DataFrame):
-            logger.info(f"[SANDBOX SERVER]      - Result DataFrame shape: {result.shape}\n")
+            logger.debug(f"[SANDBOX SERVER]      - Result DataFrame shape: {result.shape}\n")
             response = result.to_dict(orient='records')
             # response = result.to_dict(orient='list')
         elif isinstance(result, pd.Series):

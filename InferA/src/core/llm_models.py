@@ -156,7 +156,7 @@ class LanguageModelManager:
                 self.embed_llm = OllamaEmbeddings(model=OLLAMA_EMBED_MODEL_NAME)
             
             self.logger.info("[LLM MANAGER] LLMs initialized successfully.")
-            print(f"""
+            self.logger.info(f"""
             ###########################
             [Client Initialized]
             Client:         {server}
@@ -205,9 +205,9 @@ class TokenTrackingHandler(BaseCallbackHandler):
         self.max_token_limit = MAX_TOKEN_LIMIT
 
         # Pricing per million tokens ($)
-        self.cost_per_million_prompt = 2.5
-        self.cost_per_million_completion = 1.25
-        self.cost_per_million_cache = 10
+        self.cost_per_million_prompt = 0
+        self.cost_per_million_completion = 0
+        self.cost_per_million_cache = 0
     
     def on_llm_start(self, *args, **kwargs):
         if self.check_limit_exceeded():
@@ -223,7 +223,6 @@ class TokenTrackingHandler(BaseCallbackHandler):
             self.total_tokens += usage.get('total_tokens', 0)
             self.cache_tokens += usage.get('cache_creation_input_tokens', 0) + usage.get('cache_read_input_tokens', 0)
             self.logger.info(f"[CURRENT USAGE]{self.get_usage()}, {self.get_cost():.6f} $")
-            print(f"Current total token usage: {self.get_usage()}")
 
     def check_limit_exceeded(self) -> bool:
         return self.max_token_limit is not None and self.total_tokens >= self.max_token_limit

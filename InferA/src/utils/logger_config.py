@@ -3,8 +3,24 @@ import logging
 import os
 from datetime import datetime
 
-# Config flags
-def setup_logger(enable_logging: bool, enable_debug: bool, enable_console_logging: bool = False):
+# Define custom TRACE level
+TRACE_LEVEL_NUM = 5
+logging.addLevelName(TRACE_LEVEL_NUM, "TRACE")
+
+def trace(self, message, *args, **kwargs):
+    if self.isEnabledFor(TRACE_LEVEL_NUM):
+        self._log(TRACE_LEVEL_NUM, message, args, **kwargs)
+
+logging.Logger.trace = trace  # Add trace() to all loggers
+
+class ConsoleFormatter(logging.Formatter):
+    def format(self, record):
+        if record.levelno == logging.INFO:
+            return record.getMessage()  # No [INFO] prefix
+        else:
+            return f"[{record.levelname}] {record.getMessage()}"
+
+def setup_logger(print_debug_to_console: bool = False, enable_trace: bool = False):
     LOG_DIR = "logs"
     os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -15,32 +31,24 @@ def setup_logger(enable_logging: bool, enable_debug: bool, enable_console_loggin
     if root_logger.hasHandlers():
         root_logger.handlers.clear()
 
-    root_logger.setLevel(logging.DEBUG if enable_debug else logging.INFO)
-    formatter = logging.Formatter("[%(levelname)s] %(message)s")
+    # File logs everything including TRACE
+    root_logger.setLevel(TRACE_LEVEL_NUM if enable_trace else logging.DEBUG)
 
-    if enable_logging:
-        # Always add file handler if file logging enabled
-        file_handler = logging.FileHandler(log_path)
-        file_handler.setFormatter(formatter)
-        root_logger.addHandler(file_handler)
+    # File handler
+    file_formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S")
+    file_handler = logging.FileHandler(log_path)
+    file_handler.setLevel(TRACE_LEVEL_NUM if enable_trace else logging.DEBUG)
+    file_handler.setFormatter(file_formatter)
+    root_logger.addHandler(file_handler)
 
-        if enable_console_logging:
-            console_handler = logging.StreamHandler()
-            console_handler.setFormatter(formatter)
-            root_logger.addHandler(console_handler)
-
-        print(f"[LOGGING ENABLED] Logging to {log_filename} (file)")
-        if enable_console_logging:
-            print("[LOGGING ENABLED] Also logging to console")
+    # Console handler
+    console_handler = logging.StreamHandler()
+    if print_debug_to_console:
+        console_level = TRACE_LEVEL_NUM if enable_trace else logging.DEBUG
     else:
-        # No file logging, but if console logging is True, add stream handler only
-        if enable_console_logging:
-            console_handler = logging.StreamHandler()
-            console_handler.setFormatter(formatter)
-            root_logger.addHandler(console_handler)
-            print("[LOGGING ENABLED] Logging to console only (no file)")
-        else:
-            # No logging anywhere
-            root_logger.addHandler(logging.NullHandler())
+        console_level = logging.INFO
+    console_handler.setLevel(console_level)
+    console_handler.setFormatter(ConsoleFormatter())
+    root_logger.addHandler(console_handler)
 
     return root_logger

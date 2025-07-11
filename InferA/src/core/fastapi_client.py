@@ -24,7 +24,7 @@ def query_dataframe_agent(df: pd.DataFrame, pandas_code: str, api_url: str = "ht
             with open(tmp.name, 'rb') as file:
                 files = {'file': file}
                 data = {'pandas_code': pandas_code}
-                logger.info(f"[SANDBOX CLIENT] Preparing to send POST request. Data: {data}, df tempfile: {files}.")
+                logger.debug(f"[SANDBOX CLIENT] Preparing to send POST request. Data: {data}, df tempfile: {files}.")
                 query_res = requests.post(f"{api_url}/query/", files=files, data=data)
 
         if query_res.status_code != 200:
@@ -32,7 +32,7 @@ def query_dataframe_agent(df: pd.DataFrame, pandas_code: str, api_url: str = "ht
             raise Exception(f"Query failed: {query_res.text}")
 
         response = query_res.json().get("response", "")
-        logger.info(f"[SANDBOX CLIENT] Query successful. Response length: {len(str(response))}")
+        logger.debug(f"[SANDBOX CLIENT] Query successful. Response length: {len(str(response))}")
         return response
 
     except Exception as e:
@@ -40,4 +40,4 @@ def query_dataframe_agent(df: pd.DataFrame, pandas_code: str, api_url: str = "ht
         raise
 
     finally:
-        logger.info("[SANDBOX CLIENT] query_dataframe_agent function completed")
+        logger.info("[SANDBOX CLIENT] POST request to sandbox server completed")

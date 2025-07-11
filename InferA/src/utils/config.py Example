@@ -1,0 +1,36 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# llm_client.py - model configs
+MAX_TOKEN_LIMIT = 50000 # Recommend at least 50,000. Average run without quality review iterations uses 30k tokens. With iterations will use more.
+
+
+# Can choose to use LanlAI portal API or a local ollama model
+
+# LanlAI setup
+ENABLE_LANLAI = True # If true, switches model to use LanlAI API
+LANLAI_API_URL = "https://url-to-api"
+LANLAI_API_TOKEN = os.getenv("lanlAI_token")
+LANLAI_MODEL_NAME = "your-model"
+PATH_TO_LANLCHAIN_PEM = "lanlchain.pem" # This lanlchain token is required to use LANL API. Contact LANL API for how to get this.
+
+ENABLE_OPENAI = False
+OPENAI_API_KEY = os.getenv("OPENAI_KEY")
+OPENAI_MODEL_NAME = "gpt-4o" # or any model you choose
+OPENAI_EMBED_MODEL_NAME = "text-embedding-3-large" # or any embedding model you choose
+
+# Local Ollama setup
+OLLAMA_API_URL = "http://url-to-localhost"
+OLLAMA_MODEL_NAME = "mistral-small3.1:latest"  # Or any model you've pulled
+
+# Local embedding model setup
+OLLAMA_EMBED_MODEL_NAME = "nomic-embed-text:latest" # or any embedding model you choose. This is used with LANLAI as well
+
+# Working directory to save files
+WORKING_DIRECTORY = "./data_storage/"
+STATE_DICT_PATH = "./state/state.pkl"
+
+# graph_builder.py configs
+DISABLE_FEEDBACK = False # True skips human feedback. Useful for timing or if you trust the process.
