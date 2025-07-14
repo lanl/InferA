@@ -112,7 +112,7 @@ def load_to_db(columns: list, object_type: str, state: Annotated[dict, InjectedS
 
     try:
         columns = con.table(f"{object_type}").columns
-        df = con.sql(f"SELECT * FROM {object_type}").df()
+        df = con.sql(f"SELECT * FROM {object_type} LIMIT 5").df()
         pretty_print_df(df, max_rows = 5)
     except Exception as e:
         raise RuntimeError(f"DatabaseReadError: Failed to finalize or read from DuckDB. Error: {e}")

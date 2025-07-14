@@ -64,9 +64,10 @@ class Node(NodeBase):
 
         stashed_msg = state.get("stashed_msg", "")
         qa_retries = state.get("qa_retries", 0)
-
-        reset_retry = True
-        max_retries = 3
+        
+        # When qa_retries matches reset_retry, reset once.
+        reset_retry = 2
+        max_retries = 2
         threshold = 50
 
         response = self.chain.invoke({
@@ -102,7 +103,13 @@ class Node(NodeBase):
                     "qa_retries": 0,
                     "qa_failed": True
                 }
-
+            if reset_retry == qa_retries:
+                return {
+                    "messages": [{"role": "assistant", "content": f"⚠️ \033[1;31mOutput from {previous_node} failed with a score of {score}. Routing back to {previous_node}. Resetting task for retries."}], 
+                    "task": task,
+                    "next": previous_node,
+                    "qa_retries" : qa_retries
+                }
             return {
                 "messages": [{"role": "assistant", "content": f"⚠️ \033[1;31mOutput from {previous_node} failed with a score of {score}. Routing back to {previous_node} with updated task:\n{revised_task}\033[0m"}], 
                 "task": revised_task, 
