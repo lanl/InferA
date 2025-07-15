@@ -16,14 +16,14 @@ from src.core.llm_models import LanguageModelManager
 from src.core.workflow import WorkflowManager
 from src.utils.logger_config import setup_logger
 
-from src.utils.config import WORKING_DIRECTORY, STATE_DICT_PATH
+from src.utils.config import WORKING_DIRECTORY, STATE_DICT_PATH, PRINT_DEBUG_TO_CONSOLE
 
 
 class MultiAgentSystem:
     def __init__(self, session: str = None, step: str = "0"):
         self.start_time = time.time()
         self.end_time = None
-        self.logger = setup_logger(print_debug_to_console=False)
+        self.logger = setup_logger(print_debug_to_console=PRINT_DEBUG_TO_CONSOLE)
 
         self.session = session
         self.step = step
@@ -50,9 +50,9 @@ class MultiAgentSystem:
             os.makedirs(WORKING_DIRECTORY)
             self.logger.debug(f"Created working directory: {WORKING_DIRECTORY}")
         
-        if not os.path.exists(f"{WORKING_DIRECTORY}{self.state_key}/"):
-            os.makedirs(f"{WORKING_DIRECTORY}{self.state_key}/")
-            self.logger.debug(f"Created state file storage directory: {WORKING_DIRECTORY}{self.state_key}/")
+        if not os.path.exists(f"{WORKING_DIRECTORY}{self.session}/"):
+            os.makedirs(f"{WORKING_DIRECTORY}{self.session}/")
+            self.logger.debug(f"Created state file storage directory: {WORKING_DIRECTORY}{self.session}/")
 
         if not os.path.exists("./state/"):
             os.makedirs("./state/")
@@ -140,7 +140,6 @@ class MultiAgentSystem:
                 try:
                     if k == "updates":
                         pretty_print_messages(v, last_message=True)
-                        self.logger.debug(f"Last message: {v}")
                     if k == "values":
                         # Save each step as a new key in state_dict
                         new_state_key = f"{self.session}_{step_counter}"
@@ -160,8 +159,8 @@ class MultiAgentSystem:
 
 
 def main():
-    session = "142"
-    step = "0"
+    session = "144"
+    step = "30"
     # session_id = None
     system = MultiAgentSystem(session = session, step = step)
 
@@ -178,7 +177,8 @@ def main():
     # user_input = "Can you plot a timeseries pvd for all the largest halos at every timestep in simulation 0? At each timestep also include every halo within a distance of 10 Mpc."
     # user_input = "Visualize all halos within 10 Mpc of the coordinate (20,20,20) for timestep 498 of simulation 0."
     # user_input = "Across all simulations, what is the average fof_halo_count of halos at the highest timestep?"
-    user_input = "Visualize all halos within 20 Mpc of the halo with fof_halo_tag = '251375070' for timestep 498 of simulation 0."
+    # user_input = "Visualize all halos within 20 Mpc of the halo with fof_halo_tag = '251375070' for timestep 498 of simulation 0."
+    user_input = "Track the evolution of halo with fof_halo_tag = '251375070' from timestep 498 of simulation 0 through all timesteps."
     
     system.run(user_input)
 

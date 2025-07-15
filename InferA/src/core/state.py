@@ -47,5 +47,5 @@ class State(TypedDict):
 
     # data analysis nodes
     results_list: list
-    df_index: int
+    df_store: str
 

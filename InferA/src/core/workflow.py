@@ -46,14 +46,9 @@ from src.nodes import (
 
 from src.tools import (
     dataload_tools, 
-    routing_tools
-)
-
-from langchain_community.tools.sql_database.tool import (
-    InfoSQLDatabaseTool,
-    ListSQLDatabaseTool,
-    QuerySQLCheckerTool,
-    QuerySQLDatabaseTool,
+    routing_tools,
+    python_tools,
+    custom_tools,
 )
 
 class WorkflowManager:
@@ -80,7 +75,8 @@ class WorkflowManager:
         tools["dataloader_tools"] = [dataload_tools.load_file_index]
         tools["db_writer"] = [dataload_tools.load_to_db]
         tools["routing_tools"] = [routing_tools.redirect]
-        tools["sql_db_tools"] = [InfoSQLDatabaseTool, ListSQLDatabaseTool, QuerySQLCheckerTool, QuerySQLDatabaseTool]
+        tools["python_tools"] = [python_tools.GenerateCode, custom_tools.track_halo_evolution]
+        tools["visual_tools"] = [python_tools.GenerateVisualization]
 
         return tools
 
@@ -106,8 +102,8 @@ class WorkflowManager:
         agents["DataLoader"] = dataloader_node.Node(llm, self.tools["dataloader_tools"], self.tools["db_writer"])
         agents["Retriever"] = retriever_node.Node(embed_llm, server)
         agents["SQLProgrammer"] = sql_node.Node(llm)
-        agents["PythonProgrammer"] = python_node.Node(llm)
-        agents["Visualization"] = visualization_node.Node(llm)
+        agents["PythonProgrammer"] = python_node.Node(llm, self.tools["python_tools"])
+        agents["Visualization"] = visualization_node.Node(llm, self.tools["visual_tools"])
 
         return agents
 
@@ -142,6 +138,8 @@ class WorkflowManager:
         self.workflow.add_node("DataLoaderTool", ToolNode(self.tools["dataloader_tools"]))
         self.workflow.add_node("RoutingTool", ToolNode(self.tools["routing_tools"]))
         self.workflow.add_node("DBWriter", ToolNode(self.tools["db_writer"]))
+        self.workflow.add_node("PythonTool", ToolNode(self.tools["python_tools"]))
+        self.workflow.add_node("VisualTool", ToolNode(self.tools["visual_tools"]))
 
 
         # START is stateless. Use entrypoint to initialize start for initial routing: from previous state or stateless
@@ -204,10 +202,45 @@ class WorkflowManager:
             }
         )
 
+        self.workflow.add_conditional_edges(
+            "PythonProgrammer",
+            lambda x: x['next'], 
+            {
+                "PythonTool": "PythonTool", 
+                "QA": "QA"
+            }
+        )
+
+        self.workflow.add_conditional_edges(
+            "PythonTool",
+            lambda x: x["messages"][-1].status,
+            {
+                "error": "HumanFeedback",
+                "success": "QA",
+            }
+        )
+
+        self.workflow.add_conditional_edges(
+            "Visualization",
+            lambda x: x['next'], 
+            {
+                "PythonTool": "VisualTool", 
+                "QA": "QA"
+            }
+        )
+
+        self.workflow.add_conditional_edges(
+            "VisualTool",
+            lambda x: x["messages"][-1].status,
+            {
+                "error": "HumanFeedback",
+                "success": "QA",
+            }
+        )
+
         self.workflow.add_edge("SQLProgrammer", "QA")
-        self.workflow.add_edge("PythonProgrammer", "QA")
-        # self.workflow.add_edge("PythonProgrammer", END)
-        self.workflow.add_edge("Visualization", "QA")
+
+        
 
         self.workflow.add_conditional_edges(
             "RoutingTool",

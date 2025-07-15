@@ -25,6 +25,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+core.*
 
 # Virtual environment
 remote_gio_explorer/*

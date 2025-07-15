@@ -20,22 +20,22 @@ from src.utils.config import WORKING_DIRECTORY
 logger = logging.getLogger(__name__)
 
 class Node(NodeBase):
-    def __init__(self, llm):
+    def __init__(self, llm, tools):
         super().__init__("Python")
-        self.llm = llm
-        self.generate_code = self._generate_code()
+        self.llm = llm.bind_tools(tools)
+        self.call_tool = self._call_tool()
         self.session_id = None
-        self.state_key = None
     
     def run(self, state):
         task = state["task"]
         self.session_id = state.get("session_id", "")
-        self.state_key = state.get("state_key", "")
 
         db_path = state.get("db_path", None)
         results_list = state.get("results_list", [])
+        df_store = state.get("df_store", "")
         df_index = state.get("df_index", 0)
 
+        print(results_list)
 
         # Aggregate all explanations for previous dfs
         explanations = self._aggregate_explanations(results_list)
@@ -47,8 +47,9 @@ class Node(NodeBase):
             return self._error_response(error_msg)
         
         columns = list(df.columns)
+
         try:
-            response = self.generate_code.invoke({
+            response = self.call_tool.invoke({
                 "task": task, 
                 "columns": columns,
                 "df_head": df.head().to_string(),
@@ -57,11 +58,16 @@ class Node(NodeBase):
                 "df_types": df.dtypes.to_string()
             })
         except Exception as e:
-            return self._error_response(f"LLM failed to generate code: {e}")
-
-        import_code = response.get("imports", "")
-        python_code = self.extract_code_block(response.get("python_code", ""))
-        explanation = response.get("explanation", "")
+            return self._error_response(f"LLM failed to generate tool: {e}")
+        
+        tool_calls = response.tool_calls
+        code_response = next((t for t in tool_calls if t['name'] == 'GenerateCode'), None)
+        if not code_response:
+            return {"messages": [response], "next": "PythonTool", "current": "PythonProgrammer"}
+        
+        import_code = code_response['args']['imports']
+        python_code = code_response['args']['python_code']
+        explanation = code_response['args']['explanation']
 
         logger.info(f"[PYTHON PROGRAMMER] Generated pandas code:\n\n\033[1;30;47m{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
         # Execute the code safely from fastAPI server
@@ -124,29 +130,14 @@ class Node(NodeBase):
         return "\n".join(explanation_texts)
     
 
-    def _generate_code(self):
-        python_schema = [
-            ResponseSchema(
-                name="imports",
-                description="Code Block import statements"
-            ),
-            ResponseSchema(
-                name="python_code", 
-                description="Python code using pandas to process or analyze the input DataFrame, input_df."
-            ),
-            ResponseSchema(
-                name="explanation", 
-                description="Brief explanation of what the code is doing."
-            ),
-        ]
-        output_parser = StructuredOutputParser.from_response_schemas(python_schema)
-
+    def _call_tool(self):
         system_prompt = (
             """
             You are a python coding assistant with expertise in working with the Pandas library.
             Your task is to transform a pandas DataFrame named `input_df` based on user instructions. 
-
-            ***STRICT RULES (Always Follow These):***
+            You are given tools to complete your task.
+            
+            ***STRICT RULES (Always Follow These if using the GenerateCode tool):***
             - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
             - ✅ ALWAYS assign the final result to a single DataFrame named `result`.
             - ❌ NEVER use loops, file I/O, or print statements.
@@ -178,19 +169,14 @@ class Node(NodeBase):
 
             **Previous steps in the analysis pipeline:**
             {explanations}
-
-            {format_instructions}
-
-            Respond only with JSON.
             """
         )
-        
+    
         prompt_template = PromptTemplate(
             template=system_prompt,
             input_variables=["task", "columns", "df_head", "df_describe", "explanations", "df_types"],
-            partial_variables={"format_instructions": output_parser.get_format_instructions()}
         )
-        return prompt_template | self.llm | output_parser
+        return prompt_template | self.llm
     
 
     def _handle_result(self, result, python_code, explanation, import_code, df_index, results_list):
@@ -202,7 +188,7 @@ class Node(NodeBase):
                 return self._error_response(error_str)
         
         elif isinstance(result, pd.DataFrame):
-            return_file = f"{WORKING_DIRECTORY}{self.state_key}/{self.session_id}_{df_index}.csv"
+            return_file = f"{WORKING_DIRECTORY}{self.session_id}/{self.session_id}_{df_index}.csv"
             logger.info(f"\033[44m[PYTHON PROGRAMMER] Writing dataframe to {return_file}\033[0m")
             result.to_csv(return_file, index=False)
             df_index += 1
@@ -219,7 +205,7 @@ class Node(NodeBase):
         stashed_msg = f"Python code\n{python_code}\n\nOutput:\n{pretty_output}"
 
         try:
-            file_path = os.path.join(WORKING_DIRECTORY, self.state_key, f"{self.session_id}_{df_index}.py")
+            file_path = os.path.join(WORKING_DIRECTORY, self.session_id, f"{self.session_id}_{df_index}.py")
             
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             logger.debug(f"[VISUALIZATION] Ensured directory exists: {os.path.dirname(file_path)}")
@@ -267,16 +253,3 @@ class Node(NodeBase):
             "messages": [AIMessage(message)],
             "stashed_msg": message,
         }
-    
-
-    def extract_code_block(self, code_str: str) -> str:
-        """
-        Extract Python code inside triple backticks ```python ... ```
-        Returns cleaned code string.
-        """
-        pattern = r"```python(.*?)```"
-        match = re.search(pattern, code_str, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        # fallback: strip any triple backticks if present
-        return code_str.strip().strip("```").strip()

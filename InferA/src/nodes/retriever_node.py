@@ -39,7 +39,7 @@ class Node(NodeBase):
         user_inputs = state["user_inputs"][0].content
         object_type = state.get("object_type", None)
 
-        query = f"User input: {user_inputs}\nTask: {task}"
+        query = f"User input: {user_inputs}\nTask: {task}\nAlways include unique identifier and x-coordinate, y-coordinate, and z-coordinates."
         all_docs = []
 
         if object_type and isinstance(object_type, list):

@@ -89,9 +89,10 @@ class Node(NodeBase):
             "1. Analyze the task.\n"
             "2. Identify columns related to the task for the object."
             "3. Always include a column that functions as a unique identifier. Use the context of column names to determine which column to extract as the unique identifier.\n"
-            "4. Note that the data that the user asks for may not be the name of the actual column in the database.\n"
-            "5. If you are uncertain which columns are relevant, ask the user for clarification.\n"
-            "6. Do not include extra commentary. Only call the tool once you're confident in your selection."
+            "4. Always incude columns that have x, y, and z coordinate data. If you do not find all three columns, ask the user for clarification."
+            "5. Note that the data that the user asks for may not be the name of the actual column in the database.\n"
+            "6. If you are uncertain which columns are relevant, ask the user for clarification.\n"
+            "7. Do not include extra commentary. Only call the tool once you're confident in your selection."
         )
 
         self.write_prompt_template = PromptTemplate(

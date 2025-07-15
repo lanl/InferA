@@ -23,10 +23,7 @@ class Node(NodeBase):
         # Based on user feedback, revise plan or continue to steps       
         task = state["task"]
         session_id = state.get("session_id", "")
-        state_key = state.get("state_key", "")
         
-        object_type = state.get("object_type", None)
-
         db_path = state.get("db_path", None)
         db_columns = state.get("db_columns", None)
         db_tables = state.get("db_tables", None)
@@ -70,14 +67,14 @@ class Node(NodeBase):
             else:
                 pp_df = pretty_print_df(sql_response, return_output = True, max_rows = 5)
                 
-                csv_output = f"{WORKING_DIRECTORY}{state_key}/{session_id}_{df_index}.csv"
+                csv_output = f"{WORKING_DIRECTORY}{session_id}/{session_id}_{df_index}.csv"
                 logger.info(f"\033[44m[SQL PROGRAMMER] Writing dataframe result to {csv_output}.\033[0m")
                 sql_response.to_csv(csv_output, index= False)
 
                 df_index += 1
                 results_list.append((csv_output, explanation))
                 try:
-                    file_path = os.path.join(WORKING_DIRECTORY, state_key, f"{session_id}_{df_index}.sql")
+                    file_path = os.path.join(WORKING_DIRECTORY, session_id, f"{session_id}_{df_index}.sql")
 
                     os.makedirs(os.path.dirname(file_path), exist_ok=True)
                     logger.debug(f"[VISUALIZATION] Ensured directory exists: {os.path.dirname(file_path)}")

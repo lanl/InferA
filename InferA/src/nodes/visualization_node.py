@@ -20,17 +20,15 @@ from src.utils.config import WORKING_DIRECTORY
 logger = logging.getLogger(__name__)
 
 class Node(NodeBase):
-    def __init__(self, llm):
+    def __init__(self, llm, tools):
         super().__init__("Visualization")
-        self.llm = llm
-        self.generate_code = self._generate_code()
+        self.llm = llm.bind_tools(tools)
+        self.call_tools = self._call_tools()
         self.session_id = None
-        self.state_key = None
     
     def run(self, state):
         task = state["task"]
         self.session_id = state.get("session_id", "")
-        self.state_key = state.get("state_key", "")
 
         db_path = state.get("db_path", None)
         results_list = state.get("results_list", [])
@@ -46,7 +44,7 @@ class Node(NodeBase):
         
         columns = list(df.columns)
         try:
-            response = self.generate_code.invoke({
+            response = self.call_tools.invoke({
                 "task": task, 
                 "columns": columns,
                 "df_head": df.head().to_string(),
@@ -57,18 +55,22 @@ class Node(NodeBase):
         except Exception as e:
             return self._error_response(f"LLM failed to generate code: {e}")
 
-        import_code = response.get("imports", "")
-        python_code = self.extract_code_block(response.get("python_code", ""))
-        explanation = response.get("explanation", "")
+        tool_calls = response.tool_calls
+        code_response = next((t for t in tool_calls if t['name'] == 'GenerateVisualization'), None)
+        
+        if not code_response:
+            return {"messages": [response], "next": "VisualTool", "current": "Visualization"}
+        import_code = code_response['args']['imports']
+        python_code = code_response['args']['python_code']
+        explanation = code_response['args']['explanation']
 
-        logger.info(f"[VISUALIZATION] Generated pandas code:\n\n\033[1;30;47m{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
-            
+        logger.info(f"[VISUALIZATION] Generated code:\n\n\033[1;30;47m{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
         # Execute the code safely from fastAPI server
         try:
-            result = query_dataframe_agent(df, python_code)
+            result = pd.DataFrame.from_dict(query_dataframe_agent(df, python_code))
         except Exception as e:
             logger.error(f"Execution error: {e}")
-            return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}")
+            return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}.")
     
         return self._handle_result(result, python_code, explanation, import_code, df_index, results_list)
 
@@ -119,23 +121,7 @@ class Node(NodeBase):
             return str(last_explanation)
     
 
-    def _generate_code(self):
-        python_schema = [
-            ResponseSchema(
-                name="imports",
-                description="Code Block import statements"
-            ),
-            ResponseSchema(
-                name="python_code", 
-                description="Python code to process the input DataFrame, input_df, into a pyvista.PolyData object written to a VTK-compatible file. Code block not including import statements."
-            ),
-            ResponseSchema(
-                name="explanation", 
-                description="Brief explanation of what the code is doing."
-            ),
-        ]
-        output_parser = StructuredOutputParser.from_response_schemas(python_schema)
-
+    def _call_tools(self):
         system_prompt = (
             """
             You are a Python coding assistant with expertise in scientific visualization using PyVista, VTK, and MatPlotLib.
@@ -207,8 +193,6 @@ class Node(NodeBase):
             **DataFrame types:**
             {df_types}
 
-            {format_instructions}
-
             Respond only with JSON.
             """
         )
@@ -217,9 +201,8 @@ class Node(NodeBase):
         prompt_template = PromptTemplate(
             template=system_prompt,
             input_variables=["task", "columns", "df_head", "df_describe", "explanations", "df_types"],
-            partial_variables={"format_instructions": output_parser.get_format_instructions()}
         )
-        return prompt_template | self.llm | output_parser
+        return prompt_template | self.llm
     
 
     def _handle_result(self, result, python_code, explanation, import_code, df_index, results_list):
@@ -231,7 +214,7 @@ class Node(NodeBase):
             return self._error_response(error_str)
         
         elif isinstance(result, pd.DataFrame):
-            return_file = f"{WORKING_DIRECTORY}{self.state_key}/{self.session_id}_{df_index}.csv"
+            return_file = f"{WORKING_DIRECTORY}{self.session_id}/{self.session_id}_{df_index}.csv"
             logger.info(f"\033[44m[VISUALIZATION] Writing dataframe to {return_file}\033[0m")
             result.to_csv(return_file, index=False)
             df_index += 1
@@ -247,7 +230,7 @@ class Node(NodeBase):
 
         stashed_msg = f"Python code\n{python_code}\n\nOutput:\n{pretty_output}"
         try:
-            file_path = os.path.join(WORKING_DIRECTORY, self.state_key, f"{self.session_id}_{df_index}.py")
+            file_path = os.path.join(WORKING_DIRECTORY, self.session_id, f"{self.session_id}_{df_index}.py")
 
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             logger.debug(f"[VISUALIZATION] Ensured directory exists: {os.path.dirname(file_path)}")

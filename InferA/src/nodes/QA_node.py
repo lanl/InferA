@@ -39,7 +39,8 @@ class Node(NodeBase):
             "4. If revisions are required, please provide clear, actionable feedback that directly revises the agent's output.\n"
             "5. Include the numeric grade between 1 and 100 that reflects how well the output fulfills the task requirements.\n"
             "6. Do NOT include any explanations, commentary, or extraneous text outside the prescribed response.\n"
-            "7/ If code was given to you, respond with an example of specific changes to that code that are needed.\n"
+            "7. If code was given to you, respond with an example of specific changes to that code that are needed.\n"
+            "8. If agent responds only with 'SUCCESS', pass with a score of 100."
 
             "---\n"
             "### CONTEXT TO REVIEW:\n"
