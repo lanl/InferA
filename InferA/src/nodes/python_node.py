@@ -32,10 +32,10 @@ class Node(NodeBase):
 
         db_path = state.get("db_path", None)
         results_list = state.get("results_list", [])
+        working_results = []
         df_store = state.get("df_store", "")
         df_index = state.get("df_index", 0)
 
-        print(results_list)
 
         # Aggregate all explanations for previous dfs
         explanations = self._aggregate_explanations(results_list)
@@ -61,23 +61,33 @@ class Node(NodeBase):
             return self._error_response(f"LLM failed to generate tool: {e}")
         
         tool_calls = response.tool_calls
-        code_response = next((t for t in tool_calls if t['name'] == 'GenerateCode'), None)
-        if not code_response:
-            return {"messages": [response], "next": "PythonTool", "current": "PythonProgrammer"}
+        if not tool_calls:
+            logger.error(f"No tools called.")
+            return self._error_response(f"No tools called for visualization. Must return at least one tool.")
         
-        import_code = code_response['args']['imports']
-        python_code = code_response['args']['python_code']
-        explanation = code_response['args']['explanation']
+        logger.debug(f"[PYTHON PROGRAMMER] Tools called: {tool_calls}")
 
-        logger.info(f"[PYTHON PROGRAMMER] Generated pandas code:\n\n\033[1;30;47m{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
-        # Execute the code safely from fastAPI server
-        try:
-            result = pd.DataFrame.from_dict(query_dataframe_agent(df, python_code))
-        except Exception as e:
-            logger.error(f"Execution error: {e}")
-            return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}.")
-    
-        return self._handle_result(result, python_code, explanation, import_code, df_index, results_list)
+        code_response = [t for t in tool_calls if t.get("name") == 'GenerateCode']
+        other_tools = [t for t in tool_calls if t.get("name") != 'GenerateCode']
+
+        if other_tools:
+            return {"messages": other_tools, "next": "PythonTool", "current": "PythonProgrammer"}
+        if code_response:
+            code_response = code_response[0]
+
+            import_code = code_response['args']['imports']
+            python_code = code_response['args']['python_code']
+            explanation = code_response['args']['explanation']
+
+            logger.info(f"[PYTHON PROGRAMMER] Generated pandas code:\n\n\033[1;30;47m{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
+            # Execute the code safely from fastAPI server
+            try:
+                result = pd.DataFrame.from_dict(query_dataframe_agent(df, python_code))
+            except Exception as e:
+                logger.error(f"Execution error: {e}")
+                return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}.")
+        
+            return self._handle_result(result, python_code, explanation, import_code, df_index, working_results)
 
 
     def _load_dataframe(self, results_list, db_path):
@@ -90,7 +100,7 @@ class Node(NodeBase):
                 db = duckdb.connect(db_path)
                 df = db.execute("SELECT * FROM data").fetchdf()
             except Exception as e:
-                logger.error(f"Database load failed: {e}")
+                logger.error(f"Database load failed from {db_path}: {e}")
                 return None
 
         else:
@@ -101,7 +111,7 @@ class Node(NodeBase):
                     if path.endswith(".csv"):
                         dfs.append(pd.read_csv(path))
                 if not dfs:
-                    logger.error("[PYTHON PROGRAMMER] No CSV files found in results_list.")
+                    logger.error(f"No CSV files found in results_list: {results_list}.")
                     return None
                 combined_df = pd.concat(dfs)
                 logger.debug(f"[PYTHON PROGRAMMER] Loaded and concatenated CSV dataframes.")
@@ -109,7 +119,7 @@ class Node(NodeBase):
                 return combined_df
 
             except Exception as e:
-                logger.error(f"[PYTHON PROGRAMMER] Failed to load CSV: {str(e)}")
+                logger.error(f"[PYTHON PROGRAMMER] Failed to load CSV from {results_list}: {str(e)}")
                 return None
     
 
@@ -135,11 +145,11 @@ class Node(NodeBase):
             """
             You are a python coding assistant with expertise in working with the Pandas library.
             Your task is to transform a pandas DataFrame named `input_df` based on user instructions. 
-            You are given tools to complete your task.
+            You are given tools to complete your task. Answer with maximum one tool call.
             
             ***STRICT RULES (Always Follow These if using the GenerateCode tool):***
             - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
-            - ✅ ALWAYS assign the final result to a single DataFrame named `result`.
+            - ✅ ALWAYS assign the final result to a single DataFrame named `result`. It must ALWAYS be a dataframe.
             - ❌ NEVER use loops, file I/O, or print statements.
             - ✅ Use only pandas and numpy operations.
             - ✅ If the user’s task applies to only part of the DataFrame, return just the relevant rows or columns.
@@ -148,27 +158,28 @@ class Node(NodeBase):
             First, think step-by-step about how to perform the task using pandas/numpy.
             Then, return only the final code inside a Python code block.
 
-            **Task:** 
+            < Task >
             {task}
 
-            **Columns in dataframe:**
+            < Columns in dataframe >
             {columns}
 
-            **DataFrame (first few rows):**
+            < DataFrame (first few rows) >
             ```
             {df_head}
             ```
 
-            **DataFrame Statistical Summary (`df.describe()`):**
+            < DataFrame Statistical Summary (`df.describe()`) >
             ```
             {df_describe}
             ```
 
-            **DataFrame types:**
+            < DataFrame types >
             {df_types}
 
-            **Previous steps in the analysis pipeline:**
+            < Previous steps in the analysis pipeline >
             {explanations}
+
             """
         )
     
@@ -179,7 +190,7 @@ class Node(NodeBase):
         return prompt_template | self.llm
     
 
-    def _handle_result(self, result, python_code, explanation, import_code, df_index, results_list):
+    def _handle_result(self, result, python_code, explanation, import_code, df_index, working_results):
         """
         Process the result returned by executing the generated pandas code.
         """
@@ -191,16 +202,15 @@ class Node(NodeBase):
             return_file = f"{WORKING_DIRECTORY}{self.session_id}/{self.session_id}_{df_index}.csv"
             logger.info(f"\033[44m[PYTHON PROGRAMMER] Writing dataframe to {return_file}\033[0m")
             result.to_csv(return_file, index=False)
-            df_index += 1
-            results_list.append((return_file, explanation))
+            working_results.append((return_file, explanation))
             pretty_output = pretty_print_df(result, return_output=True, max_rows=5)
 
         elif isinstance(result, dict):
-            df_index += 1
-            results_list.append((f"python_{df_index}", result))
+            working_results.append((f"python_{df_index}", result))
             pretty_output = pretty_print_dict(result, return_output=True, max_items=5)
         else:
             pretty_output = str(result)
+        df_index +=1
 
         stashed_msg = f"Python code\n{python_code}\n\nOutput:\n{pretty_output}"
 
@@ -208,7 +218,7 @@ class Node(NodeBase):
             file_path = os.path.join(WORKING_DIRECTORY, self.session_id, f"{self.session_id}_{df_index}.py")
             
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            logger.debug(f"[VISUALIZATION] Ensured directory exists: {os.path.dirname(file_path)}")
+            logger.debug(f"[PYTHON PROGRAMMER] Ensured directory exists: {os.path.dirname(file_path)}")
 
             with open(file_path, 'w') as file:
                 # Write the imports
@@ -237,7 +247,7 @@ class Node(NodeBase):
             "current": "PythonProgrammer",
             "messages": [AIMessage(f"Pandas code executed successfully.\n\n{pretty_output}")],
             "stashed_msg": stashed_msg,
-            "results_list": results_list,
+            "working_results": working_results,
             "df_index": df_index,
         }
     
@@ -250,6 +260,6 @@ class Node(NodeBase):
         return {
             "next": "QA",
             "current": "PythonProgrammer",
-            "messages": [AIMessage(message)],
-            "stashed_msg": message,
+            "messages": [AIMessage(f"ERROR: {message}")],
+            "stashed_msg": f"ERROR: {message}",
         }

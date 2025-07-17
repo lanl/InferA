@@ -205,9 +205,9 @@ class TokenTrackingHandler(BaseCallbackHandler):
         self.max_token_limit = MAX_TOKEN_LIMIT
 
         # Pricing per million tokens ($)
-        self.cost_per_million_prompt = 0
-        self.cost_per_million_completion = 0
-        self.cost_per_million_cache = 0
+        self.cost_per_million_prompt = 2
+        self.cost_per_million_completion = 8
+        self.cost_per_million_cache = 0.5
     
     def on_llm_start(self, *args, **kwargs):
         if self.check_limit_exceeded():

@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from unittest.mock import patch, MagicMock
-from src.workflows.visualize_object import VisualizeObject
+from InferA.src.old_nodes.visualize_object import VisualizeObject
 
 @pytest.fixture
 def workflow():

@@ -20,21 +20,13 @@ class Node(NodeBase):
         self.schema_path = schema_path
         self.vector_store_path = vector_store_path
 
-        if os.path.exists(vector_store_path):
-            logger.info(f"[RETRIEVER] Loading existing vector store from {vector_store_path}...")
-            self.vector_store = FAISS.load_local(vector_store_path, self.embedding_model, allow_dangerous_deserialization = True)
-        else:
-            logger.info("[RETRIEVER] No existing vector store found, building a new one...")
-            self.vector_store = self._build_vector_store()
-            self.vector_store.save_local(vector_store_path)
-            
+        self.vector_store = self.initialize_vector_store()
         self.retriever = self.vector_store.as_retriever()
+        
         logger.info("[RETRIEVER] Embedded model setup.")
 
 
     def run(self, state):
-        self.check_compatible_embedding(state)
-
         task = state["task"]
         user_inputs = state["user_inputs"][0].content
         object_type = state.get("object_type", None)
@@ -56,7 +48,7 @@ class Node(NodeBase):
         with open(self.schema_path) as f:
             schema = json.load(f)
 
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=250, chunk_overlap=50)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=100)
         all_docs = []
 
         for section, fields in schema.items():
@@ -74,12 +66,55 @@ class Node(NodeBase):
             for field, props in fields.items()
         )
     
-    def check_compatible_embedding(self, state):
-        prev_server = state.get("server", None)
-        if prev_server and prev_server != self.server:
-            logger.info("❌ \033[1;31mPrevious server is not the same as current server. Loaded FAISS model may not be correct. Rebuilding FAISS model.\033[0m")
-            os.rmdir(self.vector_store_path)
-            self.vector_store = self._build_vector_store()
-            self.vector_store.save_local(self.vector_store_path)
-        else:
-            logger.info("✅ \033[1;32mChecked FAISS model compatibility.\033[0m")
+    def initialize_vector_store(self):
+        vector_store = None
+        rebuild_required = False
+
+        if os.path.exists(self.vector_store_path):
+            logger.info(f"[RETRIEVER] Vector store directory found at {self.vector_store_path}")
+            stored_server = self.read_server_info()
+            
+            if stored_server is None:
+                logger.info("⚠️ \033[1;33mNo server info found. Rebuilding FAISS model for safety.\033[0m")
+                rebuild_required = True
+            elif stored_server.get("server") != self.server:
+                logger.info("❌ \033[1;31mStored server is not the same as current server. Rebuilding FAISS model.\033[0m")
+                rebuild_required = True
+            elif stored_server.get("embedding_model") != self.embedding_model.__class__.__name__:
+                logger.info("❌ \033[1;31mStored embedding model is different from current model. Rebuilding FAISS model.\033[0m")
+                rebuild_required = True
+            else:
+                try:
+                    vector_store = FAISS.load_local(self.vector_store_path, self.embedding_model, allow_dangerous_deserialization=True)
+                    logger.info("✅ \033[1;32mLoaded existing FAISS model successfully.\033[0m")
+                except Exception as e:
+                    logger.error(f"Error loading existing vector store: {str(e)}")
+                    logger.info("⚠️ \033[1;33mRebuilding FAISS model due to loading error.\033[0m")
+                    rebuild_required = True
+
+        if vector_store is None or rebuild_required:
+            logger.info("[RETRIEVER] Building a new vector store...")
+            vector_store = self._build_vector_store()
+            vector_store.save_local(self.vector_store_path)
+            self.write_server_info(self.server, self.embedding_model)
+            logger.info("✅ \033[1;32mNew FAISS model built and saved.\033[0m")
+
+        return vector_store
+    
+    def write_server_info(self, server, embedding_model):
+        os.makedirs(self.vector_store_path, exist_ok=True)
+        
+        server_info_path = os.path.join(self.vector_store_path, "server_info.json")
+        server_info = {
+            "server": server,
+            "embedding_model": embedding_model.__class__.__name__
+        }
+        with open(server_info_path, "w") as f:
+            json.dump(server_info, f)
+
+    def read_server_info(self):
+        server_info_path = os.path.join(self.vector_store_path, "server_info.json")
+        if os.path.exists(server_info_path):
+            with open(server_info_path, "r") as f:
+                return json.load(f)
+        return None

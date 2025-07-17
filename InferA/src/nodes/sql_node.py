@@ -50,6 +50,7 @@ class Node(NodeBase):
                 table_descriptions += f"Table: {table_name}\nColumns in {table_name}: {', '.join(db_columns[i])}\n\n"
 
             logger.info(f"[SQL PROGRAMMER] SQL Query inputs:\n\nTASK: {task}\n\n{table_descriptions}\n\n")
+            
             response = self.generate_sql.invoke({"task": task, "table_descriptions": table_descriptions})
             sql_query = response['sql']
             explanation = response['explanation']
@@ -97,7 +98,7 @@ class Node(NodeBase):
                     "next": "QA",
                     "current": "SQLProgrammer",
                     "messages": [AIMessage(f"{pp_df}\n\nSQL query generated.\n{explanation}")],
-                    "stashed_msg": f"Columns: {db_columns}\n\nSQL query:\n{sql_query}\nExplanation:\n{explanation}",
+                    "stashed_msg": f"{pp_df}\n\nColumns: {db_columns}\n\nSQL query:\n{sql_query}\nExplanation:\n{explanation}",
                     "results_list": results_list,
                     "df_index": df_index
                 }
@@ -134,37 +135,39 @@ class Node(NodeBase):
 
         output_parser = StructuredOutputParser.from_response_schemas(sql_schema)
 
-        system_prompt = (
-            "You are a SQL generation agent for a cosmology simulation analysis pipeline. "
-            "Your job is to help filter large datasets into smaller, relevant subsets for downstream analysis. "
-            "You write SQL queries that extract only the essential data from the 'data' table, based on the task below.\n\n"
+        system_prompt = """
+        You are a SQL generation agent for a cosmology simulation analysis pipeline. 
+        Your task is to write SQL queries that extract essential data from the data based on your given task, filtering large datasets into smaller, relevant subsets for downstream analysis.
 
-            "Domain Knowledge:\n"
-            "- The simulation data includes: simulations (different initial conditions), timesteps (hundreds per simulation), and files for various cosmology objects.\n"
-            "- Object files include: dark matter halos, halo particles, galaxies, and galaxy particles, with coordinate and physical properties.\n\n"
-            "- Always include a column containing unique identifiers."
-            "Task:"
-            "{task}"
-            ""
-            "{table_descriptions}"
-            ""
-            "Instructions:\n"
-            "- The table names and columns for each table are given above.\n"
-            "- Try your best to join tables using matching unique identifier columns - usually fof_halo_tag or gal_tag."
-            "- Select only the columns that are relevant to the task.\n"
-            "- Never use SELECT * — be explicit about which columns to return.\n"
-            "- Optionally ORDER BY a meaningful column (e.g., mass, velocity) to get significant examples.\n"
-            "- NEVER make data modifications (no INSERT, UPDATE, DELETE, DROP, etc.).\n"
-            "- Do not rename the columns."
-            "- Always ensure your SQL is valid {dialect} syntax.\n"
-            "- Only generate a SQL query — do not explain, comment, or return anything else.\n\n"
-            "- If the task requires it, you may provide multiple independent SQL queries using a semi-colon as a separator."
-            "- Table name is ALWAYS the same as object_type. Make sure table = object_type."
-            ""
-            "{format_instructions}"
-            ""
-            "Respond only with JSON."
-        )
+        < Domain Knowledge >
+        - The simulation data includes: simulations (different initial conditions), timesteps (hundreds per simulation), and files for various cosmology objects.
+        - Object files include: dark matter halos, halo particles, galaxies, and galaxy particles, with coordinate and physical properties.
+        - Each object has its own set of 3D coordinates, physical properties, and unique identifier.
+
+        < Task >
+        {task}
+
+        < Table Descriptions >
+        {table_descriptions}
+
+        < Instructions >
+        1. Use the table names and columns provided above.
+        2. Join tables using matching unique identifier columns (usually fof_halo_tag or gal_tag)
+        3. Select only the columns relevant to the task. Never use 'SELECT *'.
+        4. Always include a column with unique identifiers.
+        5. Optionally ORDER BY a meaningful column (e.g., mass, velocity) for significant examples.
+        6. Use valid {dialect} SQL syntax.
+        7. Do not modify data (no INSERT, UPDATE, DELETE, DROP, etc.).
+        8. Do not rename the columns.
+        9. Ensure the table name matches the object_type (table = object_type).
+
+        You may provide multiple independent SQL queries separated by semicolons if required.
+        However, your job is not to do analysis, only to filter the data.
+
+        {format_instructions}
+
+        Respond only with JSON.
+        """
 
         prompt_template = PromptTemplate(
             template = system_prompt,

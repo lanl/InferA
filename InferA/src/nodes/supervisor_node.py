@@ -3,6 +3,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.nodes.node_base import NodeBase
+from src.utils.config import MESSAGE_HISTORY
 
 logger = logging.getLogger(__name__)
 
@@ -11,38 +12,41 @@ class Node(NodeBase):
         super().__init__("Supervisor")
         self.llm = llm.bind_tools(tools, tool_choice = "redirect")
         self.system_prompt = """
-            As a supervisor for a data analysis project and an expert in cosmology simulations, your role is to coordinate a team of specialized agents to process and analyze large-scale cosmology simulation data using tools like pandas and SQL.
+            You are a supervisor coordinate a team of specialized agents to process and analyze large-scale cosmology simulation data.
+            Your role is to follow a pre-written plan and delegate tasks to the appropriate team members based on their responses.
 
-            ### INSTRUCTIONS:
-            You are tasked with delegating specific, logically ordered tasks to team members. For each step, determine which agent should handle it next and describe their subtask clearly. Use the redirect tool to pass the task along. If additional information is needed before proceeding, redirect to HumanFeedback.
+            < INSTRUCTIONS >
+            1. Read the response from the previous agent carefully.
+            2. Determine the next step based on the pre-written plan and the previous agent's output.
+            3. Redirect to the appropriate agent for the next task using the Routing Tool.
+            4. If clarification is needed, redirect to HumanFeedback.
 
-            - Redirect ONLY one of the following per step: DataLoader, SQLProgrammer, PythonProgrammer, Visualization.  
-            - Use HumanFeedback ONLY to gather missing or ambiguous input.  
-            - Break complex workflows into small, sequential steps.  
-            - Respond with only one sentence per step that includes the redirection and subtask.
+            - Redirect ONLY one of the following per step: DataLoader, SQLProgrammer, PythonProgrammer, Visualization, HumanFeedback, Summary or END 
+            - Stick strictly to the pre-written plan unless HumanFeedback suggests a change.
+            - If the previous agent's response indicates an error or unexpected result, redirect to HumanFeedback for guidance and route back to previous agent.
 
-            ### CONTEXT:
-            Your team members are:
-
-            - DataLoader: Loads required files from the simulation database and writes them to a shared database. Understands contents of files.
-            - SQLProgrammer: Extracts and filters relevant data to reduce dataset size and highlight useful columns/rows.
-            - PythonProgrammer: Conducts more complex calculations and algorithmic data analyses than SQLProgrammer using Python.
-            - Visualization: Creates clear, insightful visual representations of the analyzed data.
-            - HumanFeedback: Requests more information from the user if task details are unclear or missing.
+            < TEAM MEMBERS >
+            - DataLoader: Loads and manages data files.
+            - SQLProgrammer: Writes and executes SQL queries and data filtering.
+            - PythonProgrammer: Writes and executes python code for complex calculations and analyses.
+            - Visualization: Creates visual representations of data.
+            - HumanFeedback: Provides clarification or additional information.
             - Summary: Summarizes results at the end of the task.
-            - END: You may redirect to END after all tasks are completed.
+            - END: Indicates the completion of all tasks.
 
-            ### SIMULATION STRUCTURE:
-            - simulation/: Root directory with simulations under varied initial conditions.
-            - timestep/: Contains data snapshots at each calculated timestep.
-            - cosmology object files: Hold spatial and property data on dark matter halos, galaxies, and their particles.
-
-            Use your judgment to direct the analysis process efficiently from raw data to visual insight.
-
-            ### PLAN:
+            < PLAN >
             {plan}
 
-            You are currently at step {current_step} of the plan.
+            < Previous agent >
+            {previous_member}
+
+            < Previous agent's response (if any) >
+            {previous_response}
+
+            < User feedback (if any) >
+            {user_feedback}
+
+            Respond with the redirection and the next subtask based on the plan and the previous response.
             """
 
         self.prompt_template = ChatPromptTemplate.from_messages([
@@ -65,32 +69,18 @@ class Node(NodeBase):
         messages = state["messages"]
         plan = state["plan"]
         steps = plan['steps']
-        current_step = state.get("current_step", 1)
-        stashed_msg = state.get("stashed_msg", None)
-        qa_failed = state.get("qa_failed", False)
 
-        if qa_failed:
-            current_step = current_step - 1
-            logger.info(f"[SUPERVISOR] Restarting last step: {current_step}...")
+        previous_node = state.get("current", "")
+        stashed_msg = state.get("stashed_msg", "")
+        user_input = state.get("user_input", [])
 
-            # Use failed_chain instead of chain
-            response = self.failed_chain.invoke({
-                # Only get the last 4 messages to keep token usage down
-                'message': messages[-3:],
-                'failed_msg': stashed_msg,
-                'current_step': current_step,
-                'step': steps[current_step-1]["description"],
-                'plan': plan
-            })
-            return {"messages": [response], "current": "Supervisor", "next": "RoutingTool", "current_step": current_step, "qa_failed": False}
-        
-        if current_step > len(steps):
-            return {"messages": [AIMessage("Completed analysis.")], "current": "Supervisor", "next": "END"}
-        
-        logger.info(f"\033[1;36m[SUPERVISOR] Starting step {current_step}...\n    - TASK: {steps[current_step-1]["description"]}\n\033[0m")
+        if previous_node in ["HumanFeedback"]:
+            user_input = user_input[-1]
+        else:
+            user_input = ""
 
         # task to be sent to agents is updated in the tool along with the routing
-        response = self.chain.invoke({'message': messages[-3:], 'current_step': current_step, "step": steps[current_step-1]["description"], 'plan': plan})
+        response = self.chain.invoke({'message': messages[-MESSAGE_HISTORY:],'plan': plan, 'previous_member': previous_node, 'previous_response': stashed_msg, 'user_feedback': user_input})
+        logger.debug(f"[SUPERVISOR] {response.tool_calls}")
 
-        current_step += 1
-        return {"messages": [response], "current": "Supervisor", "next": "RoutingTool", "current_step": current_step}
+        return {"messages": [response], "current": "Supervisor", "next": "RoutingTool"}

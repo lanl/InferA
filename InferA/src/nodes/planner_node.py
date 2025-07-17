@@ -28,7 +28,7 @@ class Node(NodeBase):
             Your team members are as follows:"
             - DataLoader: This member loads the necessary files for downstream analysis from the large set of files in the database, and is aware of the file contents. This member writes those files to a database which all other agents will have access to. If visualization is required, make sure to ask DataLoader to load coordinate data too.
             - SQLProgrammer: This member filters data for large datasets. He is your go-to first agent so that the other data analysis members are not overwhelmed by large amounts of data. This agent should try to collect ALL information necessary into a database - leave filtering to PythonProgrammer. However, he only has access to basic SQL features. If the SQL query requires multiple lines, break the problem down into different SQL queries or pass that task to PythonProgrammer.
-            - PythonProgrammer: This member is a world-class python programmer, and is able to perform more complex analysis on the given data that the SQLProgrammer cannot do with basic SQL, including algorithmic calculations.
+            - PythonProgrammer: This member is a world-class python programmer, and is able to perform more complex analysis on the given data that the SQLProgrammer cannot do with basic SQL, including algorithmic calculations. Do not ask Python Programmer to plot anything.
             - Visualization: This member is able to take coordinate data from the python programmer and visualize it. In order to visualize coordinates, dataloader must load coordinate columns from the database.
             - Summary: This member summarizes the final result. Always add the Summary member at the end of the task to summarize findings.
 
@@ -41,11 +41,13 @@ class Node(NodeBase):
             Note that you are not required to delegate to all of your team members. Limit the extent of your task to what the user requested. Each step should only call one of the members and provide a summary of the tasks that member should complete.
             
             **Example:**
-            TASK: Find the largest halo from timestep 498 in simulation 0.
-            - Step 1. DataLoader: Identifies halo files and also writes those data files to a database.
-            - Step 2. SQLProgrammer: Reads the database, runs a SQL query based on schema context, which filters and extracts the largest halos from timestep 498 in simulation 0, writes data to a dataframe.
-            - Step 3. PythonProgrammer: Computes further filtering on the dataframe from SQLProgrammer.
-            - Step 4. Summary: Summarizes the results from PythonProgrammer.
+            TASK: Visualize the 100 largest halos and 100 largest galaxies from timestep 498 in simulation 0.
+            - Step 1. DataLoader: Identifies halo and galaxy files and also writes those data files to a database.
+            - Step 2. SQLProgrammer: Reads the database, runs a SQL query to find the 100 largest halos, returns a DataFrame.
+            - Step 3. SQLProgrammer: Reads the database, runs a SQL query to find the 100 largest galaxies, returns a DataFrame.
+            - Step 4. PythonProgrammer: Takes DataFrames from previous SQL steps, combines them into one dataframe.
+            - Step 5. Visualization: Loads DataFrame from previous step, writes a VTP file plotting the coordinates of all 100 halos and galaxies.
+            - Step 5. Summary: Summarizes the results from PythonProgrammer and Visualization.
             - Complete. No need to call other members for additional tasks.
             Respond only with JSON, dividing each step of the task.
         '''
@@ -57,15 +59,34 @@ class Node(NodeBase):
 
         self.chain = self.prompt_template | self.llm
         
+        
     def run(self, state):
         task = state["messages"]
-        response = self.chain.invoke({'message': task})
-
-        return {"messages": [{"role": "assistant", "content": f"Planning next steps for analysis:\n{self.pretty_print_steps(response)}"}], 
+        approved = state.get("approved", False)
+        if not approved: 
+            response = self.chain.invoke({'message': task})
+            return {
+                "messages": [{
+                    "role": "assistant", 
+                    "content": f"Plan for analysis:\n{self.pretty_print_steps(response)}"
+                }], 
                 "plan": response, 
-                "current": "Planner"
+                "current": "Planner",
+                "next": "HumanFeedback"
                 }
+        else:
+            # Skip planning; assume existing plan is approved
+            return {
+                "messages": [{
+                    "role": "assistant", 
+                    "content": "Plan approved. Beginning analysis."
+                }], 
+                "next": "Supervisor",
+                "current": "Planner",
+                "approved": False
+            }
     
+
     def pretty_print_steps(self, plan):
         str = f"\n\033[1;35mTask: {plan["task"]}\033[0m\n\n"
         count = 1

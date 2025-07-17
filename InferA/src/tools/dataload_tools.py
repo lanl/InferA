@@ -33,9 +33,9 @@ logger = logging.getLogger(__name__)
 @tool(parse_docstring=True)
 def load_to_db(columns: list, object_type: str, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
     """
-    This tool reads specific columns from multiple time-stepped simulation files for only one object,
-    enriches it with metadata (simulation ID, time step, object), and writes the data to a local DuckDB database file. 
-    Example: If given the task "Load halo data", run with columns for haloproperties (including fof_halo_tag the unique identifier).
+    This tool reads specific columns from multiple time-stepped simulation files for only one object, and
+    enriches it with metadata (simulation ID, time step, object, x, y, z-coordinates), and writes the data to a local DuckDB database file. 
+    Example: If given the task "Load halo data", run with columns for haloproperties (including fof_halo_tag the unique identifier, fof_halo_count the size metric, fof_halo_center_x, fof_halo_center_y, and fof_halo_center_z as x,y,z coordinates).
 
     Args:
         columns: A list of column names to extract from the data files.
@@ -57,9 +57,9 @@ def load_to_db(columns: list, object_type: str, state: Annotated[dict, InjectedS
         raise ValueError("MissingFileIndexError: The file index is missing from state. Use the DataLoader to extract relevant files.")
 
     if session_id:
-        DUCKDB_DIRECTORY = f"{WORKING_DIRECTORY}{state_key}/{session_id}.duckdb"
+        DUCKDB_DIRECTORY = f"{WORKING_DIRECTORY}{session_id}/{session_id}.duckdb"
     else:
-        DUCKDB_DIRECTORY = f"{WORKING_DIRECTORY}{state_key}/data.duckdb"
+        DUCKDB_DIRECTORY = f"{WORKING_DIRECTORY}{session_id}/data.duckdb"
 
     # Write to DuckDB file
     try:
@@ -246,18 +246,6 @@ def index_simulation_directories(root_paths: List[str], valid_object_types: set)
 
     return index
 
-# @time_function
-# def load_db(data):
-#     db = DSI(f"{WORKING_DIRECTORY}/124.duckdb", backend_name="DuckDB")
-#     db.list()
-#     db.display("data", 10)
-
-def main():
-    # load_file_index([0], [498], ["haloproperties"])
-    load_to_db(["fof_halo_count", "fof_halo_tag", "fof_halo_mass"])
-    # db = duckdb.connect(f"{WORKING_DIRECTORY}/data.duckdb")
-    # db.sql("PRAGMA table_info('data')").show()
-    # sql_df = db.sql("SELECT fof_halo_tag, fof_halo_mass, fof_halo_count, time_step FROM data WHERE simulation = 0 AND time_step IN (498, 105) ORDER BY time_step, fof_halo_mass DESC LIMIT 5;").df()
 
 if __name__ == "__main__":
     main()

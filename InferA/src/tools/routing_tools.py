@@ -17,6 +17,7 @@ def redirect(
         task: A concise and clear description of what the selected agent should do next. This is provided by the Planner agent's plan.
     """
     return Command(update={
+        "current": "RoutingTool",
         "next": next,
         "task": task,
         "messages": [

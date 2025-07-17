@@ -155,18 +155,19 @@ class MultiAgentSystem:
                 except Exception as e:
                     self.logger.error(f"Unable to print message {k}:{v}. {e}")
         except Exception as e:
-            self.logger.error(e)
+            self.logger.error(f"Graph stream failed: {e}")
 
 
 def main():
-    session = "144"
-    step = "30"
+    session = "9"
+    step = "0"
     # session_id = None
     system = MultiAgentSystem(session = session, step = step)
 
     # user_input = input("You: ")
 
     # user_input = "Can you plot the change in mass of the largest friends-of-friends halos for all timesteps in simulation 0? Provide me two plots using both fof_halo_count and fof_halo_mass as metrics for mass."
+    # user_input = "Visualize all halos within 20 Mpc of the halo with fof_halo_tag = '251375070' for timestep 498 of simulation 0."
     # user_input = "Can you find me the top 20 largest friends-of-friends halos from timestep 498 in simulation 0?"
     # user_input = "I want to visualize the top 20 largest friends-of-friends halos from timestep 498 in simulation 0? Use the halo center as coordinates for visualization."
     # user_input = "Find me the 10 friends-of-friends halos closest in coordinates to the halo with fof_halo_tag = '251375070' in timestep 498 of simulation 0. Use columns 'fof_halo_tag', 'fof_halo_center_x', 'fof_halo_center_y', 'fof_halo_center_z'."
@@ -177,8 +178,10 @@ def main():
     # user_input = "Can you plot a timeseries pvd for all the largest halos at every timestep in simulation 0? At each timestep also include every halo within a distance of 10 Mpc."
     # user_input = "Visualize all halos within 10 Mpc of the coordinate (20,20,20) for timestep 498 of simulation 0."
     # user_input = "Across all simulations, what is the average fof_halo_count of halos at the highest timestep?"
-    # user_input = "Visualize all halos within 20 Mpc of the halo with fof_halo_tag = '251375070' for timestep 498 of simulation 0."
-    user_input = "Track the evolution of halo with fof_halo_tag = '251375070' from timestep 498 of simulation 0 through all timesteps."
+    
+    # user_input = "Track the evolution of halo with fof_halo_tag = '251375070' from timestep 498 of simulation 0 through all timesteps."
+    user_input = "A theory in cosmology is that the galaxies form in halos. I would be interested in seeing if the largest galaxies might form in the largest halos. Please find the largest 100 galaxies and 100 halos at timestep 498. I would like to plot all of them in Paraview and also see how well aligned those galaxies and halos are to each other."
+
     
     system.run(user_input)
 

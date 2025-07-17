@@ -3,6 +3,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.prompts import PromptTemplate
 
 from src.nodes.node_base import NodeBase
+from src.tools.human_feedback import human_feedback
 from src.utils.json_loader import open_json
 
 logger = logging.getLogger(__name__)
@@ -57,47 +58,61 @@ class Node(NodeBase):
         """
         super().__init__("DataLoader")
         self.llm_load = llm.bind_tools(load_tools)
-        self.llm_write = llm.bind_tools(db_tools)
+        self.llm_write = llm.bind_tools(db_tools, parallel_tool_calls = False)
 
-        self.load_prompt = (
-            "You are a data loading agent for simulation data. Your task is:\n"
-            "{task}\n\n" \
-            "" \
-            "These are the object_type files available and a description of each file:" \
-            "{context}" \
-            ""\
-            "1. Use the context below (column names) to decide what metadata and object_type is relevant.\n"
-            "2. Call load_file_index with the correct metadata.\n"
-            "Ask the user if any required parameter is missing.\n\n"
-        )
+        self.load_prompt = """
+            You determine which files are necessary to load for a task.\n
+            < Task >
+            {task}\n\n
+            
+            These are the object_type files available and a description of each file:
+            < Files available and descriptions >
+            {context}
+            
+            1. Use the context below (column names) to decide what metadata and object_type is relevant.\n
+            2. Call load_file_index with the correct metadata.\n
+            3. If a required parameter is missing, ask the user for those parameters.
+            4. Call the tool a maximum of one time. If multiple simulations, objects, or timesteps, include all of them in a list.
+            """
+        
         self.load_prompt_template = PromptTemplate(
             template = self.load_prompt,
             input_variables=["task", "context"]
         )
         self.chain_load = self.load_prompt_template | self.llm_load
 
-        self.write_prompt = (
-            "You are a data ingestion agent. Your job is to determine which columns from a dataset should be written to a database.\n\n"
-            "The user has given you this task:\n"
-            "{task}\n\n"
-            "Here are the available files and a brief description of what is contained in each file:\n"
-            "{description}\n\n"
-            "Below is the context with available column names and their descriptions:\n"
-            "{context}\n\n"
-            ""
-            "**Your goal is to:**\n"
-            "1. Analyze the task.\n"
-            "2. Identify columns related to the task for the object."
-            "3. Always include a column that functions as a unique identifier. Use the context of column names to determine which column to extract as the unique identifier.\n"
-            "4. Always incude columns that have x, y, and z coordinate data. If you do not find all three columns, ask the user for clarification."
-            "5. Note that the data that the user asks for may not be the name of the actual column in the database.\n"
-            "6. If you are uncertain which columns are relevant, ask the user for clarification.\n"
-            "7. Do not include extra commentary. Only call the tool once you're confident in your selection."
-        )
+        self.write_prompt ="""
+            You are a data ingestion agent. Your job is to determine which columns from a dataset should be written to a database.
+
+            The supervisor has given you this task:
+            < Task >
+            {task}
+
+            Here are the available files and a brief description of what is contained in each file:
+            < Files available and descriptions >
+            {description}
+
+            Below is the context with available column names and their descriptions for each file type:
+            < Columns and descriptions >
+            {context}
+
+            < User input >
+            {user_input}
+
+            **Your goal is to:**
+            1. Based on the task, identify which columns are related to completing the task.
+            2. Always include a column that functions as a unique identifier. Use the context of column names to determine which column to extract as the unique identifier.
+            3. Always include columns that contain (x, y, z) coordinate data. Use the context of column names to determine which column to extract as the x,y,z coordinate data. 
+                ** If you do not find all three columns, ask the user for clarification and do not call a tool.
+            4. If you are uncertain which columns are relevant or you think columns are missing, do not return a tool. Instead, ask the user for clarification.
+            
+            Note that the data that the user asks for may not be the name of the actual column in the database.
+            Call the tool a maximum of one time with one object_type.
+            Do not include extra commentary. Only call the tool once you're confident in your selection."""
 
         self.write_prompt_template = PromptTemplate(
             template = self.write_prompt,
-            input_variables=["task", "context", "description"]
+            input_variables=["task", "context", "description", "user_input"]
         )
         self.chain_write = self.write_prompt_template | self.llm_write
         
@@ -126,13 +141,15 @@ class Node(NodeBase):
                 - next: The next node or tool to transition to.
                 - current: The current node name.
         """
-        task = state["messages"]
+        task = state.get("task")
+        user_input = state.get("user_input", [])
         file_index = state.get("file_index", None)
-        object_type = state.get("object_type", None)
+        object_type = state.get("object_type", [])
         current_obj = state.get("current_obj", 0)
+        approved = state.get("approved", False)
 
         retrieved_docs = state.get("retrieved_docs", None)
-        db_path = state.get("db_path", None)
+        db_path = state.get("db_path", "")
 
         # Load file descriptions from JSON for context
         try:
@@ -169,21 +186,29 @@ class Node(NodeBase):
             obj = object_type[current_obj]
             obj_description = f"**File**: {obj}\n**Description**: {file_descriptions[obj]}"
 
-            response = self.chain_write.invoke({
-                "task": task, 
-                "context": retrieved_docs, 
-                "description": obj_description
-            })
+            user_input = ""
+            approved = False
+            
+            while not approved:
+                response = self.chain_write.invoke({
+                    "task": task, 
+                    "context": retrieved_docs, 
+                    "description": obj_description,
+                    "user_input": user_input,
+                })
+                if not response.tool_calls:
+                    logger.warning(f"[DATALOADER] No tools called. Routing to human feedback for more info.")
+                    return {"messages": [response], "current_obj": current_obj, "next": "HumanFeedback", "current": "DataLoader"}
+                
+                feedback, approved = human_feedback(f"{response.content}\n{response.tool_calls}\n")
 
-            # If writing agent called no tools, route to human feedback
-            if not response.tool_calls:
-                logger.warning(f"[DATALOADER] No tools called. Routing to human feedback for more info.")
-                return {"messages": [response], "current_obj": current_obj, "next": "HumanFeedback", "current": "DataLoader"}
-            else:
-                current_obj += 1
-                logger.debug(f"[DATALOADER] Tool called.")
-                return {"messages": [response], "current_obj": current_obj, "next": "DBWriter", "current": "DataLoader"}
-        
+                if approved:
+                    current_obj += 1
+                    logger.debug(f"[DATALOADER] Tool called.")
+                    return {"messages": [response], "current_obj": current_obj, "next": "DBWriter", "current": "DataLoader", "approved": False}
+                else:
+                    user_input = "\n".join([user_input, feedback.content])
+            
         # If all required steps completed, signal success and move to Supervisor
         if retrieved_docs and file_index and db_path:
             logger.debug(f"[DATALOADER] All dataloading tasks complete.")

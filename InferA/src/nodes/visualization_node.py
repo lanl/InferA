@@ -32,6 +32,7 @@ class Node(NodeBase):
 
         db_path = state.get("db_path", None)
         results_list = state.get("results_list", [])
+        working_results = []
         df_index = state.get("df_index", 0)
 
         last_explanation = self._get_last_explanation(results_list)
@@ -54,25 +55,37 @@ class Node(NodeBase):
             })
         except Exception as e:
             return self._error_response(f"LLM failed to generate code: {e}")
+        
 
         tool_calls = response.tool_calls
-        code_response = next((t for t in tool_calls if t['name'] == 'GenerateVisualization'), None)
-        
-        if not code_response:
-            return {"messages": [response], "next": "VisualTool", "current": "Visualization"}
-        import_code = code_response['args']['imports']
-        python_code = code_response['args']['python_code']
-        explanation = code_response['args']['explanation']
-
-        logger.info(f"[VISUALIZATION] Generated code:\n\n\033[1;30;47m{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
-        # Execute the code safely from fastAPI server
-        try:
-            result = pd.DataFrame.from_dict(query_dataframe_agent(df, python_code))
-        except Exception as e:
-            logger.error(f"Execution error: {e}")
-            return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}.")
+        if not tool_calls:
+            logger.error(f"No tools called.")
+            return self._error_response(f"No tools called for visualization. Must return at least one tool.")
     
-        return self._handle_result(result, python_code, explanation, import_code, df_index, results_list)
+        logger.debug(f"[VISUALIZATION] Tools called: {tool_calls}")
+
+
+        code_response = [t for t in tool_calls if t.get("name") == 'GenerateVisualization']
+        other_tools = [t for t in tool_calls if t.get("name") != 'GenerateVisualization']
+        
+        if other_tools:
+            return {"messages": other_tools, "next": "VisualTool", "current": "Visualization"}
+        if code_response:
+            code_response = code_response[0]
+            
+            import_code = code_response['args']['imports']
+            python_code = code_response['args']['python_code']
+            explanation = code_response['args']['explanation']
+
+            logger.info(f"[VISUALIZATION] Generated code:\n\n\033[1;30;47m{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
+            # Execute the code safely from fastAPI server
+            try:
+                result = query_dataframe_agent(df, python_code)
+            except Exception as e:
+                logger.error(f"Execution error: {e}")
+                return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}.")
+        
+            return self._handle_result(result, python_code, explanation, import_code, df_index, working_results)
 
 
     def _load_dataframe(self, results_list, db_path):
@@ -85,7 +98,7 @@ class Node(NodeBase):
                 db = duckdb.connect(db_path)
                 df = db.execute("SELECT * FROM data").fetchdf()
             except Exception as e:
-                logger.error(f"Database load failed: {e}")
+                logger.error(f"Database load failed from {db_path}: {e}")
                 return None
 
         else:
@@ -96,11 +109,11 @@ class Node(NodeBase):
                     logger.info(f"[VISUALIZATION] Loaded dataframe from: {last_path}")
                     return df
                 else:
-                    logger.error(f"[VISUALIZATION] Last item is not a CSV: {last_path}")
+                    logger.error(f"[VISUALIZATION] Last item is not a CSV: {last_path} from {results_list}")
                     return None
 
             except Exception as e:
-                logger.error(f"[VISUALIZATION] Failed to load CSV: {str(e)}")
+                logger.error(f"[VISUALIZATION] Failed to load CSV from {results_list}: {str(e)}")
                 return None
     
 
@@ -129,8 +142,10 @@ class Node(NodeBase):
             
             If you are given coordinates or instructions to plot points, you must convert this DataFrame into a `pyvista.PolyData` object for visualization and write the result to a VTK-compatible file.
             If you are NOT given coordinates or instructions to plot points, you must plot using MatPlotLib.
+            You are given tools to complete your task. If no tool besides GenerateVisualization is able to complete the task, use GenerateVisualization.
+            Answer with maximum one tool call.
 
-            ***STRICT RULES (Always Follow These):***
+            ***STRICT RULES (Always Follow These if using GenerateVisualization):***
             - ✅ Use ONLY the following libraries: pandas as pd, numpy as np, pyvista as pv, matplotlib.pyplot as plt, and vtk.
             - ✅ If time-series or multiple time steps are detected or implied, write `.pvd` files with per-frame `.vtp` files.
             - ✅ Always assign the output file name to a single variable named 'result'.
@@ -162,10 +177,6 @@ class Node(NodeBase):
             plt.savefig("data_storage/plot_output.png")
             plt.close()
             ```
-
-            ***Multi-Timestep Example (PVD):***
-            - For each timestep, write a `.vtp` file and add it to a `.pvd` index.
-            - Use naming like: `data_storage/visual_output/frame_000.vtp`, ..., `data_storage/visual_output/visual_output.pvd`
 
             All DataFrames contain point-based fields.
             First, analyze the DataFrame to determine which columns to use for visualization.
@@ -205,7 +216,7 @@ class Node(NodeBase):
         return prompt_template | self.llm
     
 
-    def _handle_result(self, result, python_code, explanation, import_code, df_index, results_list):
+    def _handle_result(self, result, python_code, explanation, import_code, df_index, working_results):
         """
         Process the result returned by executing the generated pandas code.
         """
@@ -214,16 +225,19 @@ class Node(NodeBase):
             return self._error_response(error_str)
         
         elif isinstance(result, pd.DataFrame):
-            return_file = f"{WORKING_DIRECTORY}{self.session_id}/{self.session_id}_{df_index}.csv"
-            logger.info(f"\033[44m[VISUALIZATION] Writing dataframe to {return_file}\033[0m")
-            result.to_csv(return_file, index=False)
-            df_index += 1
-            results_list.append((return_file, explanation))
-            pretty_output = pretty_print_df(result, return_output=True, max_rows=5)
+            if result.empty:
+                logger.info(f"[VISUALIZATION] DataFrame is empty, skipping file write.")
+            else:
+                return_file = f"{WORKING_DIRECTORY}{self.session_id}/{self.session_id}_{df_index}.csv"
+                logger.info(f"\033[44m[VISUALIZATION] Writing dataframe to {return_file}\033[0m")
+                result.to_csv(return_file, index=False)
+                df_index += 1
+                working_results.append((return_file, explanation))
+                pretty_output = pretty_print_df(result, return_output=True, max_rows=5)
 
         elif isinstance(result, dict):
             df_index += 1
-            results_list.append((f"python_{df_index}", result))
+            working_results.append((f"python_{df_index}", result))
             pretty_output = pretty_print_dict(result, return_output=True, max_items=5)
         else:
             pretty_output = str(result)
@@ -261,7 +275,7 @@ class Node(NodeBase):
             "current": "Visualization",
             "messages": [AIMessage(f"Pandas code executed successfully.\n\n{pretty_output}")],
             "stashed_msg": stashed_msg,
-            "results_list": results_list,
+            "working_results": working_results,
             "df_index": df_index,
         }
     
@@ -274,8 +288,8 @@ class Node(NodeBase):
         return {
             "next": "QA",
             "current": "Visualization",
-            "messages": [AIMessage(message)],
-            "stashed_msg": message,
+            "messages": [AIMessage(f"ERROR: {message}")],
+            "stashed_msg": f"ERROR: {message}",
         }
     
 

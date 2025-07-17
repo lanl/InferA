@@ -76,7 +76,7 @@ class WorkflowManager:
         tools["db_writer"] = [dataload_tools.load_to_db]
         tools["routing_tools"] = [routing_tools.redirect]
         tools["python_tools"] = [python_tools.GenerateCode, custom_tools.track_halo_evolution]
-        tools["visual_tools"] = [python_tools.GenerateVisualization]
+        tools["visual_tools"] = [python_tools.GenerateVisualization, custom_tools.generate_pvd_file]
 
         return tools
 
@@ -125,7 +125,7 @@ class WorkflowManager:
         self.workflow.add_node("Summary", self.agents["Summary"])
 
         self.workflow.add_node("Planner", self.agents["Planner"])
-        self.workflow.add_node("Verifier", self.agents["Verifier"])
+        # self.workflow.add_node("Verifier", self.agents["Verifier"])
         self.workflow.add_node("Supervisor", self.agents["Supervisor"])
 
         self.workflow.add_node("Retriever", self.agents["Retriever"])
@@ -151,15 +151,12 @@ class WorkflowManager:
             {}
         )
 
-        self.workflow.add_edge("Planner", "Verifier")
-        # self.workflow.add_edge("Planner", END)
-    
         self.workflow.add_conditional_edges(
-            "Verifier",
+            "Planner",
             lambda x: x["next"],
             {
-                "HumanFeedback": "HumanFeedback",
-                "RoutingTool": "RoutingTool",
+                "Supervisor": "Supervisor",
+                "HumanFeedback": "HumanFeedback"
             }
         )
 
@@ -167,7 +164,7 @@ class WorkflowManager:
             "Supervisor",
             lambda x: x['next'], 
             {
-                "RoutingTool": "RoutingTool", 
+                "RoutingTool": "RoutingTool",
                 "END": END
             }
         )
@@ -224,7 +221,7 @@ class WorkflowManager:
             "Visualization",
             lambda x: x['next'], 
             {
-                "PythonTool": "VisualTool", 
+                "VisualTool": "VisualTool", 
                 "QA": "QA"
             }
         )
@@ -260,15 +257,20 @@ class WorkflowManager:
 
         self.workflow.add_conditional_edges("HumanFeedback", 
             lambda x: x["next"],
-            {
-                "Supervisor": "Supervisor",
-                "DataLoader": "DataLoader",
-                "Planner": "Planner",
-                "Verifier": "Verifier",
-                "SQLProgrammer": "SQLProgrammer",
-                "END": END
-            }
+            {}
         )
+
+        # self.workflow.add_conditional_edges("HumanFeedback", 
+        #     lambda x: x["next"],
+        #     {
+        #         "Supervisor": "Supervisor",
+        #         "DataLoader": "DataLoader",
+        #         "Planner": "Planner",
+        #         "Verifier": "Verifier",
+        #         "SQLProgrammer": "SQLProgrammer",
+        #         "END": END
+        #     }
+        # )
 
         self.workflow.add_edge("Summary", "Supervisor")
 
