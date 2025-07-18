@@ -14,6 +14,7 @@ faiss-cpu
 
 requests
 pydantic
+ipykernel
 
 # setup sandbox - tabulate needed for pandas agent
 fastapi

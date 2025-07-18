@@ -30,3 +30,5 @@ genericio/*
 !logs
 !logs/.placeholder
 
+test.ipynb
+test_scripts/*

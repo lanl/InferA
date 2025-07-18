@@ -54,6 +54,7 @@ class Node(NodeBase):
             response = self.generate_sql.invoke({"task": task, "table_descriptions": table_descriptions})
             sql_query = response['sql']
             explanation = response['explanation']
+            output_description = response['output_description']
             logger.info(f"[SQL PROGRAMMER] Generated SQL: \n\n\033[1;30;47m{sql_query}\n\n{explanation}\033[0m\n\n")
 
             # Execute SQL query
@@ -73,7 +74,7 @@ class Node(NodeBase):
                 sql_response.to_csv(csv_output, index= False)
 
                 df_index += 1
-                results_list.append((csv_output, explanation))
+                results_list.append((csv_output, explanation, f"SQL Programmer: {output_description}"))
                 try:
                     file_path = os.path.join(WORKING_DIRECTORY, session_id, f"{session_id}_{df_index}.sql")
 
@@ -129,8 +130,12 @@ class Node(NodeBase):
             ),
             ResponseSchema(
                 name="explanation", 
-                description="Brief explanation of what the code is doing."
+                description="Brief explanation of what the code is doing. Make sure to discuss which table the SQL query is operating on."
             ),
+            ResponseSchema(
+                name="output_description",
+                description="Briefly describe what the output is and what it looks like."
+            )
         ]
 
         output_parser = StructuredOutputParser.from_response_schemas(sql_schema)
@@ -147,20 +152,23 @@ class Node(NodeBase):
         < Task >
         {task}
 
-        < Table Descriptions >
+        < Table names and columns in each table >
         {table_descriptions}
 
+        < Syntax Instructions >
+        1. Only use the table names and columns provided above. Check twice to make sure the columns you provide exist in the corresponding table.
+        2. Ensure the table name correctly matches the above and do not make your own table ( example: table = haloproperties ).
+
         < Instructions >
-        1. Use the table names and columns provided above.
-        2. Join tables using matching unique identifier columns (usually fof_halo_tag or gal_tag)
-        3. Select only the columns relevant to the task. Never use 'SELECT *'.
-        4. Always include a column with unique identifiers.
-        5. Optionally ORDER BY a meaningful column (e.g., mass, velocity) for significant examples.
+        1. Include all columns provided in the database. Never use 'SELECT *'.
+        2. Always include a column with unique identifiers.
+        3. Always include a column with x, y, z coordinate data if it exists in the table.
+        4. Join tables using matching unique identifier columns (usually fof_halo_tag or gal_tag)
+        5. Optionally ORDER BY a meaningful column for significant examples.
         6. Use valid {dialect} SQL syntax.
         7. Do not modify data (no INSERT, UPDATE, DELETE, DROP, etc.).
         8. Do not rename the columns.
-        9. Ensure the table name matches the object_type (table = object_type).
-
+        
         You may provide multiple independent SQL queries separated by semicolons if required.
         However, your job is not to do analysis, only to filter the data.
 

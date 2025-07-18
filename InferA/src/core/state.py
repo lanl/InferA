@@ -8,7 +8,6 @@ class State(TypedDict):
     user_inputs: Annotated[list[BaseMessage], add_messages]
 
     session_id: str
-    state_key: str
 
     model: str
 
@@ -39,7 +38,7 @@ class State(TypedDict):
     db_columns: list[list]
 
     # retriever node
-    retrieved_docs: list
+    retrieved_docs: dict
 
     # planner node
     plan: dict

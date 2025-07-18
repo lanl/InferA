@@ -25,7 +25,15 @@ class Node(NodeBase):
         
         logger.debug(previous_node)
 
-        if DISABLE_FEEDBACK:
+        if DISABLE_FEEDBACK:            
+            if previous_node in ["DataLoader"]:
+                return {
+                    "messages": [AIMessage("\033[1;31mSkipping human feedback in DataLoader.\033[0m")], 
+                    "next": previous_node, 
+                    "user_inputs": [HumanMessage("You may ignore those variables and continue forward with any variables you have available to you.")],
+                    "current": "HumanFeedback",
+                    "approved": True
+                }
             return {
                 "messages": [AIMessage("\033[1;31mSkipping human feedback (automatic approval). Sending back to previous node.\033[0m")], 
                 "next": previous_node, 

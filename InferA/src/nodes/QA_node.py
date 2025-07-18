@@ -11,11 +11,23 @@ from src.utils.config import MESSAGE_HISTORY, DISABLE_FEEDBACK
 logger = logging.getLogger(__name__)
 
 class FormattedReview(TypedDict):
-    score: int = Field(..., description="A numeric grade to the output between 1 and 100 that reflects how well the output fulfills the task requirements.")
-    user_request: str = Field(..., description="Describe specific feedback the user provided, if any.")
-    critique: str = Field(..., description="Clearly identifies what is missing, incorrect, or poorly executed in the output.")
-    revisions: str = Field(..., description="Clearly list revisions necessary to the output.")
-    example: str = Field(..., description="Provides a brief example of what changes could be made to the output.")
+    score: int = Field(...,
+        description="A numeric grade for the output between 1 and 100. "
+                    "1-20: Poor, 21-40: Fair, 41-60: Good, 61-80: Very Good, 81-100: Excellent. "
+                    "Consider factors like accuracy, completeness, and relevance to the task."
+    )
+    original_task: str = Field(...,description="Provide the original task.")
+    # user_request: str = Field(...,
+    #     description="Describe specific feedback the user provided, if any. "
+    #                 "Include both explicit feedback and any implicit expectations or "
+    #                 "requirements inferred from the user's query."
+    # )
+    # critique: str = Field(..., description="Clearly identifies what is missing, incorrect, or poorly executed in the output. Structure this as: 1) Strengths, 2) Weaknesses, 3) Areas for improvement.")
+    revisions: str = Field(...,description="Clearly list specific, actionable revisions necessary to improve the output. Prioritize these revisions based on their potential impact.")
+    before_example: str = Field(..., description="Provide a small snippet of where the error in the code is occuring.")
+    after_example: str = Field(..., description="Provide an example of changes to the before_example code snippet that would fix the output.")
+    summary: str = Field(..., description="A brief overall assessment of the output quality and the most critical areas for improvement.")
+    confidence: float = Field(..., description="A value between 0 and 1 indicating the AI's confidence in its review and suggestions.")
 
 class Node(NodeBase):
     def __init__(self, llm):
@@ -105,22 +117,42 @@ class Node(NodeBase):
 
         try:
             score = int(response.get("score", 0))
-            critique = response.get("critique", "")
+            original_task = response.get("original_task", "")
             revisions = response.get("task", "")
-            example = response.get("example", "")
+            before_example = response.get("before_example", "")
+            after_example = response.get("after_example", "")
+            summary = response.get("summary", "")
+            confidence = float(response.get("confidence", 0))
 
         except Exception as e:
             logger.error(f"Failed to parse QA response JSON: {e}")
             score = 0
-            critique = ""
+            original_task = ""
             revisions = ""
-            example = ""
+            before_example = ""
+            after_example = ""
+            summary = ""
+            confidence = 0
         
-        revised_task = f"< INITIAL TASK >\n{task}\n\n< Critiques >\n{critique}\n\n< REVISIONS NEEDED >\n{revisions}\n\n"
+        # revised_task = f"< INITIAL TASK >\n{task}\n\n< Critiques >\n{critique}\n\n< REVISIONS NEEDED >\n{revisions}\n\n"
+        revised_task = f"""
+ORIGINAL TASK: {original_task}
+
+SUMMARY: {summary}
+
+OVERALL SCORE: {score}
+
+REVISIONS (Priority order):
+{revisions}
+
+EXAMPLE OF CHANGES:
+    BEFORE: {before_example}
+    AFTER: {after_example}
+"""
         logger.debug(revised_task)
 
         if score < threshold:
-            logger.info(f"Critiques:\n{critique}\n\nRevisions:\n{revisions}\n\n")
+            logger.info(f"Overall score: {score}\n\nSummary of changes:\n{summary}\n\nRevisions:\n{revisions}\n\n")
             qa_retries += 1
             if qa_retries > max_retries:
                 return {
@@ -137,7 +169,7 @@ class Node(NodeBase):
                     "qa_retries" : qa_retries
                 }
             return {
-                "messages": [{"role": "assistant", "content": f"⚠️ \033[1;31mOutput from {previous_node} failed with a score of {score}. Routing back to {previous_node} with updated task:\n{revised_task}\033[0m"}], 
+                "messages": [{"role": "assistant", "content": f"⚠️ \033[1;31mOutput from {previous_node} failed with a score of {score}. Routing back to {previous_node} with updated task.\033[0m"}], 
                 "task": revised_task, 
                 "next": previous_node,
                 "qa_retries" : qa_retries
@@ -148,5 +180,6 @@ class Node(NodeBase):
                 "messages": [{"role": "assistant", "content": f"✅ \033[1;32mOutput from {previous_node} passed with a score of {score}. Routing to Supervisor to begin next task.\033[0m"}], 
                 "next": "Supervisor",
                 "qa_retries": 0,
-                "results_list": results_list
+                "results_list": results_list,
+                "working_results": []
             }

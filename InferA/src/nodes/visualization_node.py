@@ -20,9 +20,9 @@ from src.utils.config import WORKING_DIRECTORY
 logger = logging.getLogger(__name__)
 
 class Node(NodeBase):
-    def __init__(self, llm, tools):
+    def __init__(self, llm, code_tools):
         super().__init__("Visualization")
-        self.llm = llm.bind_tools(tools)
+        self.llm = llm.bind_tools(code_tools)
         self.call_tools = self._call_tools()
         self.session_id = None
     
@@ -30,15 +30,13 @@ class Node(NodeBase):
         task = state["task"]
         self.session_id = state.get("session_id", "")
 
-        db_path = state.get("db_path", None)
         results_list = state.get("results_list", [])
-        working_results = []
         df_index = state.get("df_index", 0)
 
-        last_explanation = self._get_last_explanation(results_list)
+        output_description = self._get_last_description(results_list)
 
         # Load dataframes for processing
-        df = self._load_dataframe(results_list, db_path)
+        df = self._load_last_df(results_list)
         if df is None:
             error_msg = "[VISUALIZATION] Failed to load any dataframe for processing."
             return self._error_response(error_msg)
@@ -46,18 +44,19 @@ class Node(NodeBase):
         columns = list(df.columns)
         try:
             response = self.call_tools.invoke({
+                "session_id": self.session_id,
                 "task": task, 
+                "output_description": output_description,
                 "columns": columns,
                 "df_head": df.head().to_string(),
                 "df_describe": df.describe().to_string(),
-                "explanation": last_explanation,
                 "df_types": df.dtypes.to_string()
             })
         except Exception as e:
             return self._error_response(f"LLM failed to generate code: {e}")
-        
 
         tool_calls = response.tool_calls
+        print(tool_calls)
         if not tool_calls:
             logger.error(f"No tools called.")
             return self._error_response(f"No tools called for visualization. Must return at least one tool.")
@@ -76,6 +75,7 @@ class Node(NodeBase):
             import_code = code_response['args']['imports']
             python_code = code_response['args']['python_code']
             explanation = code_response['args']['explanation']
+            output_description = code_response['args']['output_description']
 
             logger.info(f"[VISUALIZATION] Generated code:\n\n\033[1;30;47m{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
             # Execute the code safely from fastAPI server
@@ -85,125 +85,143 @@ class Node(NodeBase):
                 logger.error(f"Execution error: {e}")
                 return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}.")
         
-            return self._handle_result(result, python_code, explanation, import_code, df_index, working_results)
+            return self._handle_result(result, import_code, python_code, explanation, output_description, df_index)
 
 
-    def _load_dataframe(self, results_list, db_path):
+    def _load_last_df(self, results_list):
         """
         Load dataframe either from CSV files in results_list or from a database.
         """
-        if not results_list:
-            logger.warning(f"[VISUALIZATION] No dataframes from previous steps. Getting dataframe from db.")       
-            try:
-                db = duckdb.connect(db_path)
-                df = db.execute("SELECT * FROM data").fetchdf()
-            except Exception as e:
-                logger.error(f"Database load failed from {db_path}: {e}")
+        try:
+            last_path, _, _ = results_list[-1]
+            if last_path.endswith(".csv"):
+                df = pd.read_csv(last_path)
+                logger.info(f"[VISUALIZATION] Loaded dataframe from: {last_path}")
+                return df
+            else:
+                logger.error(f"[VISUALIZATION] Last item is not a CSV: {last_path} from {results_list}")
                 return None
 
-        else:
-            try:
-                last_path, _ = results_list[-1]
-                if last_path.endswith(".csv"):
-                    df = pd.read_csv(last_path)
-                    logger.info(f"[VISUALIZATION] Loaded dataframe from: {last_path}")
-                    return df
-                else:
-                    logger.error(f"[VISUALIZATION] Last item is not a CSV: {last_path} from {results_list}")
-                    return None
-
-            except Exception as e:
-                logger.error(f"[VISUALIZATION] Failed to load CSV from {results_list}: {str(e)}")
-                return None
+        except Exception as e:
+            logger.error(f"[VISUALIZATION] Failed to load CSV from {results_list}: {str(e)}")
+            return None
     
 
-    def _get_last_explanation(self, results_list):
+    def _get_last_description(self, results_list):
         """
         Return only the last explanation from the results
         """
         if not results_list:
             return ""
-        
-        _, last_explanation = results_list[-1]
-        if isinstance(last_explanation, dict):
-            try:
-                return json.dumps(last_explanation, indent=2)
-            except Exception:
-                return str(last_explanation)
-        else:
-            return str(last_explanation)
+        _, _, output_description = results_list[-1]
+        return str(output_description)
     
 
     def _call_tools(self):
         system_prompt = (
             """
-            You are a Python coding assistant with expertise in scientific visualization using PyVista, VTK, and MatPlotLib.
-            Your task is to generate code based on a given `pandas.DataFrame` named `input_df`.
+            You are a Python coding assistant specializing in scientific visualization using PyVista, VTK, and MatPlotLib.
+            Your task is to generate code based on a given pandas.DataFrame named `input_df`.
             
-            If you are given coordinates or instructions to plot points, you must convert this DataFrame into a `pyvista.PolyData` object for visualization and write the result to a VTK-compatible file.
-            If you are NOT given coordinates or instructions to plot points, you must plot using MatPlotLib.
-            You are given tools to complete your task. If no tool besides GenerateVisualization is able to complete the task, use GenerateVisualization.
-            Answer with maximum one tool call.
+            < Data Visualization Rules >
+            - Use PyVista/VTK for 3D data or when explicitly instructed to plot points/geometries
+            - Use Matplotlib for 2D plots, time series without 3D coordinates, or statistical visualizations
+            - If uncertain, default to Matplotlib for simplicity.
+            - Only perform one type of visualization (e.g. only line plots, only histograms, only 3D pv data).
 
-            ***STRICT RULES (Always Follow These if using GenerateVisualization):***
-            - ✅ Use ONLY the following libraries: pandas as pd, numpy as np, pyvista as pv, matplotlib.pyplot as plt, and vtk.
-            - ✅ If time-series or multiple time steps are detected or implied, write `.pvd` files with per-frame `.vtp` files.
-            - ✅ Always assign the output file name to a single variable named 'result'.
-            - ✅ Always write the final output to directory: `"data_storage/`. Output file can be .vtk, .png, or .pvd (if timeseries coordinate data).
-            - ✅ The output should include all relevant scalar/vector fields and point/mesh geometry derived from the DataFrame.
-            - ✅ Visualization code MUST be tailored to the task and content of the DataFrame (e.g., 3D points, mesh cells, etc.).
-            - ✅ Return a single Python code block inside triple backticks: ```python ...code... ```.
-            - ❌ NEVER include print statements or file reading code.
-            - ✅ Use `pyvista.PolyData(...)` for visualization, not manual VTK bindings.
+            < Libraries and Imports >
+            import pandas as pd
+            import numpy as np
+            import pyvista as pv
+            import matplotlib.pyplot as plt
+            import vtk
 
-            ***Basic Example for coordinate data (Follow This Format When Applicable):***
+            < File Output Rules >
+            - Assign the output file name to a variable named 'result'
+            - Write all output files to the "data_storage/{session_id}" directory.
+            - Use appropriate file extensions: .vtk or .vtp for PyVista, .png for Matplotlib.
+
+            < PyVista/VTK Visualization Guidelines >
+            - Convert DataFrame columns to numpy arrays for PyVista input.
+            - Use pv.PolyData for point-based data, pv.UnstructuredGrid for volumetric data.
+            - Include all relevant scalar/vector fileds from the DataFrame.
+            - For time series data and .pvd, use the generate_pvd_file tool given.
+
+            < Matplotlib Visualization Guidelines >
+            - Choose appropriate plot types based on data (e.g, line, scatter, bar, histogram).
+            - Always include labels, titles and legends where applicable.
+            - Use plt.tight_layout() to prevent overlapping elements.
+
+            < Code Structure and Comments >
+            - Begin with a brief comment explaining the visualization purpose.
+            - Group related operations with clear, descriptive comments.
+            - Use meaningful variable names that reflect their content.
+
+            < Error Handling >
+            - Include basic error checking (e.g., verify required columns exist).
+            - Use try-except blocks for potential issues like division by zero or invalid data types.
+
+            Examples:
+
+            Example 1. 3D Point Cloud with Scalar Field:
             ```python
-            # Convert DataFrame with x, y, z columns into PolyData and write to a .vtp file
+            # Visualize 3D point cloud with temperature data
             points = input_df[['x', 'y', 'z']].to_numpy()
-            pdata = pyvista.PolyData(points)
-            pdata['temperature'] = input_df['temp'].to_numpy()
-            pdata.save("data_storage/visual_output.vtp")
-            ```
+            temp = input_df['temperature'].to_numpy()
 
-            ***Basic Example for non-coordinate data (Follow This Format When Applicable):***
-            ```python
-            # Assume input_df has columns 'x' and 'y'
-            plt.figure(figsize=(8,6))
-            plt.plot(input_df['x'], input_df['y'], label='Line plot')
-            plt.xlabel('x')
-            plt.ylabel('y')
-            plt.title('Example Plot')
+            # Create PolyData and add temperature as scalar field
+            pdata = pv.PolyData(points)
+            pdata['Temperature'] = temp
+
+            # Save to VTK file
+            result = "data_storage/temperature_point_cloud.vtk"
+            pdata.save(result)
+
+            Example 2. Time Series Line Plot
+            # Create time series plot of temperature
+            plt.figure(figsize=(10, 6))
+            plt.plot(input_df['timestamp'], input_df['temperature'], label='Temperature')
+            plt.xlabel('Time')
+            plt.ylabel('Temperature (°C)')
+            plt.title('Temperature Over Time')
             plt.legend()
-            plt.savefig("data_storage/plot_output.png")
+            plt.tight_layout()
+
+            # Save plot
+            result = "data_storage/temperature_time_series.png"
+            plt.savefig(result)
             plt.close()
-            ```
 
-            All DataFrames contain point-based fields.
-            First, analyze the DataFrame to determine which columns to use for visualization.
-            Then, build the appropriate PyVista visualization object and save it accordingly.
+            Example 3. 3D Time Series
+            Call generate_pvd_file tool
 
-            **Task:** 
+            < Task >
             {task}
 
-            **Previous step in the analysis pipeline:**
-            {explanation}
+            < Output from previous step >
+            {output_description}
 
-            **Columns in dataframe:**
+            < Columns in input_df >
             {columns}
 
-            **DataFrame (first few rows):**
+            < DataFrame (first few rows) >
             ```
             {df_head}
             ```
 
-            **DataFrame Statistical Summary (`df.describe()`):**
+            < DataFrame Statistical Summary (`df.describe()`) >
             ```
             {df_describe}
             ```
 
-            **DataFrame types:**
+            < DataFrame types >
             {df_types}
 
+            Analyze the DataFrame to determine appropriate visualization method and columns to use. 
+            Then, generate a Python code block that creates the visualization and saves it to a file. 
+            Ensure the code follows the guidelines and examples provided above.
+
+            You must call a tool.
             Respond only with JSON.
             """
         )
@@ -211,33 +229,34 @@ class Node(NodeBase):
         
         prompt_template = PromptTemplate(
             template=system_prompt,
-            input_variables=["task", "columns", "df_head", "df_describe", "explanations", "df_types"],
+            input_variables=["session_id", "task", "output_description", "columns", "df_head", "df_describe", "df_types"],
         )
         return prompt_template | self.llm
     
 
-    def _handle_result(self, result, python_code, explanation, import_code, df_index, working_results):
+    def _handle_result(self, result, import_code, python_code, explanation, output_description, df_index):
         """
         Process the result returned by executing the generated pandas code.
         """
+        working_results = []
         if isinstance(result, dict) and "error_type" in result and "error_message" in result:
             error_str = f"Execution returned error: {result['error_type']}: {result['error_message']}.\nCode: {python_code}"
             return self._error_response(error_str)
         
         elif isinstance(result, pd.DataFrame):
             if result.empty:
-                logger.info(f"[VISUALIZATION] DataFrame is empty, skipping file write.")
+                logger.info(f"[VISUALIZATION] No dataframe returned.")
             else:
                 return_file = f"{WORKING_DIRECTORY}{self.session_id}/{self.session_id}_{df_index}.csv"
                 logger.info(f"\033[44m[VISUALIZATION] Writing dataframe to {return_file}\033[0m")
                 result.to_csv(return_file, index=False)
                 df_index += 1
-                working_results.append((return_file, explanation))
+                working_results.append((return_file, explanation, output_description))
                 pretty_output = pretty_print_df(result, return_output=True, max_rows=5)
 
         elif isinstance(result, dict):
             df_index += 1
-            working_results.append((f"python_{df_index}", result))
+            working_results.append((f"python_{df_index}", result, output_description))
             pretty_output = pretty_print_dict(result, return_output=True, max_items=5)
         else:
             pretty_output = str(result)
@@ -291,16 +310,3 @@ class Node(NodeBase):
             "messages": [AIMessage(f"ERROR: {message}")],
             "stashed_msg": f"ERROR: {message}",
         }
-    
-
-    def extract_code_block(self, code_str: str) -> str:
-        """
-        Extract Python code inside triple backticks ```python ... ```
-        Returns cleaned code string.
-        """
-        pattern = r"```python(.*?)```"
-        match = re.search(pattern, code_str, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        # fallback: strip any triple backticks if present
-        return code_str.strip().strip("```").strip()

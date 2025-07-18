@@ -88,7 +88,7 @@ class MultiAgentSystem:
         
     def run(self, user_input: str) -> None:
         state_key = self.state_key
-        config = {"configurable": {"thread_id": state_key}, "recursion_limit": 50}
+        config = {"configurable": {"thread_id": state_key}, "recursion_limit": 75}
 
         if state_key not in self.state_dict:
             self.state_dict[state_key] = {
@@ -159,7 +159,7 @@ class MultiAgentSystem:
 
 
 def main():
-    session = "9"
+    session = "17"
     step = "0"
     # session_id = None
     system = MultiAgentSystem(session = session, step = step)
@@ -172,7 +172,7 @@ def main():
     # user_input = "I want to visualize the top 20 largest friends-of-friends halos from timestep 498 in simulation 0? Use the halo center as coordinates for visualization."
     # user_input = "Find me the 10 friends-of-friends halos closest in coordinates to the halo with fof_halo_tag = '251375070' in timestep 498 of simulation 0. Use columns 'fof_halo_tag', 'fof_halo_center_x', 'fof_halo_center_y', 'fof_halo_center_z'."
     # user_input = "Can you map out the largest friends-of-friends halos for all timesteps in simulation 0?"
-    # user_input = "What are the top 10 largest galaxies in the largest halo in timestep 498 of simulation 0?"
+    # user_input = "A leading theory in cosmology is that galaxies form in dark matter halos. It would be interesting to know the characteristics of galaxies that form in the largest halos. What are the top 10 largest galaxies in the largest halo in timestep 498 of simulation 0? What are their characteristics?"
     # user_input = "Can you plot the time series change over time of the largest galaxy in simulation 2?"
     # user_input = "Can you plot a vtk of all the halos within 10 Mpc of the largest halo at timestep 498 of simulation 0?"
     # user_input = "Can you plot a timeseries pvd for all the largest halos at every timestep in simulation 0? At each timestep also include every halo within a distance of 10 Mpc."

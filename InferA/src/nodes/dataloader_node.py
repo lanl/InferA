@@ -5,6 +5,7 @@ from langchain_core.prompts import PromptTemplate
 from src.nodes.node_base import NodeBase
 from src.tools.human_feedback import human_feedback
 from src.utils.json_loader import open_json
+from src.utils.config import DISABLE_FEEDBACK
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class Node(NodeBase):
             db_tools: Tools for writing to the database (e.g., load_to_db).
         """
         super().__init__("DataLoader")
-        self.llm_load = llm.bind_tools(load_tools)
+        self.llm_load = llm.bind_tools(load_tools, parallel_tool_calls = False)
         self.llm_write = llm.bind_tools(db_tools, parallel_tool_calls = False)
 
         self.load_prompt = """
@@ -65,8 +66,8 @@ class Node(NodeBase):
             < Task >
             {task}\n\n
             
-            These are the object_type files available and a description of each file:
-            < Files available and descriptions >
+            These are the object types available and a description of each object type:
+            < Objects available and descriptions >
             {context}
             
             1. Use the context below (column names) to decide what metadata and object_type is relevant.\n
@@ -88,23 +89,22 @@ class Node(NodeBase):
             < Task >
             {task}
 
-            Here are the available files and a brief description of what is contained in each file:
-            < Files available and descriptions >
+            < Object type to write to database >
+            {object}
+
+            < Description of object type>
             {description}
 
-            Below is the context with available column names and their descriptions for each file type:
-            < Columns and descriptions >
+            < Column names and their definitions related to object type >
             {context}
 
             < User input >
             {user_input}
 
             **Your goal is to:**
-            1. Based on the task, identify which columns are related to completing the task.
+            1. Based on the task and the object type, determine which columns are related to completing the task.
             2. Always include a column that functions as a unique identifier. Use the context of column names to determine which column to extract as the unique identifier.
-            3. Always include columns that contain (x, y, z) coordinate data. Use the context of column names to determine which column to extract as the x,y,z coordinate data. 
-                ** If you do not find all three columns, ask the user for clarification and do not call a tool.
-            4. If you are uncertain which columns are relevant or you think columns are missing, do not return a tool. Instead, ask the user for clarification.
+            3. If you are uncertain which columns are relevant or you think columns are missing, do not return a tool. Instead, ask the user for clarification.
             
             Note that the data that the user asks for may not be the name of the actual column in the database.
             Call the tool a maximum of one time with one object_type.
@@ -180,19 +180,20 @@ class Node(NodeBase):
             else:
                 logger.debug(f"[DATALOADER] Column names not retrieved yet. Routing to retriever node.")       
             return {"next": "Retriever", "current": "DataLoader", "messages": [AIMessage("Retrieving relevant columns. Sending to retriever node.")]}
-        
+
         # If columns retrieved and file index present but no DB path yet, run writing chain        
         if current_obj < len(object_type):
             obj = object_type[current_obj]
-            obj_description = f"**File**: {obj}\n**Description**: {file_descriptions[obj]}"
+            obj_description =file_descriptions[obj]
 
             user_input = ""
             approved = False
-            
+
             while not approved:
                 response = self.chain_write.invoke({
                     "task": task, 
-                    "context": retrieved_docs, 
+                    "context": retrieved_docs[obj], 
+                    "object": obj,
                     "description": obj_description,
                     "user_input": user_input,
                 })
@@ -200,6 +201,8 @@ class Node(NodeBase):
                     logger.warning(f"[DATALOADER] No tools called. Routing to human feedback for more info.")
                     return {"messages": [response], "current_obj": current_obj, "next": "HumanFeedback", "current": "DataLoader"}
                 
+                if DISABLE_FEEDBACK:
+                    user_input = "Ignore it and continue of your own accord without feedback."
                 feedback, approved = human_feedback(f"{response.content}\n{response.tool_calls}\n")
 
                 if approved:

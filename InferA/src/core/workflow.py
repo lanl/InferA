@@ -76,6 +76,7 @@ class WorkflowManager:
         tools["db_writer"] = [dataload_tools.load_to_db]
         tools["routing_tools"] = [routing_tools.redirect]
         tools["python_tools"] = [python_tools.GenerateCode, custom_tools.track_halo_evolution]
+        tools["dataframe_tools"] = [python_tools.LoadDataframes]
         tools["visual_tools"] = [python_tools.GenerateVisualization, custom_tools.generate_pvd_file]
 
         return tools
@@ -102,7 +103,7 @@ class WorkflowManager:
         agents["DataLoader"] = dataloader_node.Node(llm, self.tools["dataloader_tools"], self.tools["db_writer"])
         agents["Retriever"] = retriever_node.Node(embed_llm, server)
         agents["SQLProgrammer"] = sql_node.Node(llm)
-        agents["PythonProgrammer"] = python_node.Node(llm, self.tools["python_tools"])
+        agents["PythonProgrammer"] = python_node.Node(llm, self.tools["python_tools"], self.tools["dataframe_tools"])
         agents["Visualization"] = visualization_node.Node(llm, self.tools["visual_tools"])
 
         return agents

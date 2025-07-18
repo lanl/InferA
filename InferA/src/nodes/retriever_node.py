@@ -21,7 +21,11 @@ class Node(NodeBase):
         self.vector_store_path = vector_store_path
 
         self.vector_store = self.initialize_vector_store()
-        self.retriever = self.vector_store.as_retriever()
+        self.retriever = self.vector_store.as_retriever(
+            search_type = "mmr",
+            search_kwargs = {'k': 20}
+            # search_type = "similarity_score_threshold",
+        )
         
         logger.info("[RETRIEVER] Embedded model setup.")
 
@@ -30,39 +34,54 @@ class Node(NodeBase):
         task = state["task"]
         user_inputs = state["user_inputs"][0].content
         object_type = state.get("object_type", None)
+        plan = state["plan"]
 
-        query = f"User input: {user_inputs}\nTask: {task}\nAlways include unique identifier and x-coordinate, y-coordinate, and z-coordinates."
-        all_docs = []
+        query = f"[IMPORTANT] Retrieve names marked as important.\nUser input: {user_inputs}\nTask: {task}\n\n{plan}."
+        all_docs = {}
+        total_docs = 0
 
+        query = ["[IMPORTANT] Retrieve names marked as important.", f"{user_inputs}", f"{task}", f"{plan}"]
         if object_type and isinstance(object_type, list):
             for obj in object_type:
-                docs = self.retriever.invoke(query, filter = {"object_type": obj})
-                all_docs.extend(docs)
+                docs = []
+                for q in query:
+                    doc = self.retriever.invoke(q, filter = {"object_type": obj})
+                    docs.extend(doc)
+                total_docs += len(docs)
+                all_docs[obj] = docs
         else:
-            all_docs = self.retriever.invoke(query)
-
-        return {"messages": [AIMessage(f"Retrieved {len(all_docs)} relevant documents. {query}.")], "retrieved_docs": all_docs, "next": state["current"], "current": "Retriever", "server": self.server}
+            docs = []
+            for q in query:
+                doc = self.retriever.invoke(q)
+                docs.extend(doc)
+            total_docs += len(docs)
+            all_docs["All"] = docs 
+        return {"messages": [AIMessage(f"Retrieved {total_docs} relevant documents.\n\n{query}.")], "retrieved_docs": all_docs, "next": state["current"], "current": "Retriever"}
 
 
     def _build_vector_store(self):
         with open(self.schema_path) as f:
             schema = json.load(f)
 
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=100)
+        # text_splitter = RecursiveCharacterTextSplitter(chunk_size=125, chunk_overlap=25)
         all_docs = []
 
         for section, fields in schema.items():
-            rag_text = self._generate_rag_text(fields["columns"])
-            docs = text_splitter.split_documents([
-                Document(page_content=rag_text, metadata={"object_type": section})
-            ])
-            all_docs.extend(docs)
+            for field, props in fields["columns"].items():
+                text = f"{field} - Definition : {props['description']}".strip()
+                doc = Document(page_content=text, metadata={"object_type": section, "column": field})
+                all_docs.append(doc)
+            # rag_text = self._generate_rag_text(fields["columns"])
+            # docs = text_splitter.split_documents([
+            #     Document(page_content=rag_text, metadata={"object_type": section})
+            # ])
+            # all_docs.extend(docs)
         
         return FAISS.from_documents(all_docs, self.embedding_model)
 
     def _generate_rag_text(self, fields):
         return "\n".join(
-            f"Field: {field}\n - Description: {props['description']}\n"
+            f"< Column > {field} - < Description > {props['description']}\n"
             for field, props in fields.items()
         )
     
@@ -114,7 +133,10 @@ class Node(NodeBase):
 
     def read_server_info(self):
         server_info_path = os.path.join(self.vector_store_path, "server_info.json")
-        if os.path.exists(server_info_path):
-            with open(server_info_path, "r") as f:
-                return json.load(f)
-        return None
+        try:
+            if os.path.exists(server_info_path):
+                with open(server_info_path, "r") as f:
+                    return json.load(f)
+            return None
+        except:
+            return None

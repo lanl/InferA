@@ -34,8 +34,7 @@ logger = logging.getLogger(__name__)
 def load_to_db(columns: list, object_type: str, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
     """
     This tool reads specific columns from multiple time-stepped simulation files for only one object, and
-    enriches it with metadata (simulation ID, time step, object, x, y, z-coordinates), and writes the data to a local DuckDB database file. 
-    Example: If given the task "Load halo data", run with columns for haloproperties (including fof_halo_tag the unique identifier, fof_halo_count the size metric, fof_halo_center_x, fof_halo_center_y, and fof_halo_center_z as x,y,z coordinates).
+    enriches it with metadata (simulation ID, time step, object, x, y, z-coordinates), and writes the data to a local DuckDB database file.
 
     Args:
         columns: A list of column names to extract from the data files.

@@ -23,7 +23,7 @@ def human_feedback(approve_msg) -> dict:
     logger.info("--- Human feedback requested ---")
 
     if DISABLE_FEEDBACK:
-        logger.info("Skipping human feedback (automatic approval).")
+        logger.info("Skipping human feedback (leave approval to agent).")
         feedback = HumanMessage("Approved")
         approved = True
         return feedback, approved
@@ -38,7 +38,7 @@ def human_feedback(approve_msg) -> dict:
         user_input = ""
 
     if user_input in ['y', 'yes']:
-        feedback = HumanMessage("Approved")
+        feedback = HumanMessage("Approved.")
         approved = True
     else:
         feedback = HumanMessage(f"Not approved.\nFeedback: {user_input}")
