@@ -132,3 +132,40 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+
+# env configs and miscellaneous test env files
+lanlchain.pem
+config.py
+state/state.pkl
+venv_*
+cache
+cache/*
+
+# helper shell scripts
+allocate_gpu.sh
+load_modules.sh
+
+# intermediate data storage dir
+data_storage/*
+!data_storage/.placeholder
+
+# genericio library from Argonne National Lab
+genericio/*
+!genericio
+!genericio/.placeholder
+
+# miscellaneous data files and logs
+src/data/*.csv
+src/data/vector_store
+
+src/old_nodes/*
+
+src/data/JSON/*
+!src/data/JSON
+!src/data/JSON/.placeholder
+
+logs/*
+*.log
+!logs
+!logs/.placeholder

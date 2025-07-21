@@ -45,3 +45,88 @@ This program was produced under U.S. Government contract 89233218CNA000001 for L
 
 
 
+
+# Setting up local ollama
+
+1. Installing ollama - follow the first part of these instructions: 
+https://copdips.com/2025/03/installing-ollama-without-root.html
+```
+mkdir -p ~/src
+cd ~/src
+curl -L https://ollama.com/download/ollama-linux-amd64.tgz -o ollama-linux-amd64.tgz
+mkdir -p ~/opt/ollama
+tar -C ~/opt/ollama -xzf ollama-linux-amd64.tgz
+```
+
+2. Get a node with gpu. You should be allocated a node: eg cn111.
+```
+cd /<your_folder>/InferA
+salloc -N 1 -p volta-x86
+```
+
+3. Start ollama: ~/opt/ollama/bin/ollama serve
+
+4. Start a new terminal, connecting to the cluster and then to the node:
+```
+ssh <your_username>@darwin-fe.lanl.gov
+ssh <allocated_node>
+```
+
+5. Pull the models you want to use e.g.
+```
+~/opt/ollama/bin/ollama pull nomic-embed-test:latest
+or
+~/opt/ollama/bin/ollama pull mistral-small3.1:latest
+```
+
+# Create a python environment
+
+1. In your project ollama folder, python environment created via:
+```
+cd /<your_folder>/InferA
+python -m venv venv_InferA
+source venv_InferA/bin/activate
+```
+
+2. Make sure python environment is activated. Install modules using:
+```
+python -m pip install -r requirements.txt
+```
+
+# Add genericio module
+
+1. If you haven't setup remote_gio_explorer yet, do that. I copied the genericio directory here to import.
+
+
+# Running
+
+1. Get a node with gpu
+```
+salloc -N 1 -p volta-x86
+```
+
+2. Start ollama: ~/opt/ollama/bin/ollama serve
+
+3. Start a new terminal, connecting to the cluster and then to the node:
+```
+ssh <your_username>@darwin-fe.lanl.gov
+ssh <allocated_node> # e.g ssh cn123
+```
+
+4. Load module and activate python environment
+Load the following modules:
+
+```
+module load miniconda3/py312_24.11.1
+module load openmpi/3.1.6-gcc_9.4.0
+module load cuda/12.3.1 
+module load cmake/3.29.2
+```
+
+```
+cd /<your_folder>/
+source venv_InferA/bin/activate
+```
+
+5. Run main.py or any of the test_*.ipynb
+
