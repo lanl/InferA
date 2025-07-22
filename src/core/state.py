@@ -51,3 +51,6 @@ class State(TypedDict):
     # qa node
     qa_retries: int
     qa_failed: bool
+
+    # documentation node
+    last_documentation: str

@@ -137,19 +137,19 @@ class Node(NodeBase):
         
         # revised_task = f"< INITIAL TASK >\n{task}\n\n< Critiques >\n{critique}\n\n< REVISIONS NEEDED >\n{revisions}\n\n"
         revised_task = f"""
-ORIGINAL TASK: {original_task}
+            ORIGINAL TASK: {original_task}
 
-SUMMARY: {summary}
+            SUMMARY: {summary}
 
-OVERALL SCORE: {score}
+            OVERALL SCORE: {score}
 
-REVISIONS (Priority order):
-{revisions}
+            REVISIONS (Priority order):
+            {revisions}
 
-EXAMPLE OF CHANGES:
-    BEFORE: {before_example}
-    AFTER: {after_example}
-"""
+            EXAMPLE OF CHANGES:
+                BEFORE: {before_example}
+                AFTER: {after_example}
+        """
         logger.debug(revised_task)
 
         if score < threshold:
@@ -157,9 +157,9 @@ EXAMPLE OF CHANGES:
             qa_retries += 1
             if qa_retries > max_retries:
                 return {
-                    "messages": [{"role": "assistant", "content": f"❌ \033[1;31mMaximum QA retries reached with score {score}. Failed to complete the task: {task}\n\n. Escalating to Supervisor.\033[0m"}],
+                    "messages": [{"role": "assistant", "content": f"❌ \033[1;31mMaximum QA retries reached with score {score}. Failed to complete the task: {task}\n\n. Escalating to Documentation/Supervisor.\033[0m"}],
                     "task": revised_task,
-                    "next": "Supervisor",
+                    "next": "Documentation",
                     "qa_retries": 0,
                 }
             if qa_retries%reset_retry==0:
@@ -178,8 +178,8 @@ EXAMPLE OF CHANGES:
         else:
             results_list.extend(working_results)
             return {
-                "messages": [{"role": "assistant", "content": f"✅ \033[1;32mOutput from {previous_node} passed with a score of {score}. Routing to Supervisor to begin next task.\033[0m"}], 
-                "next": "Supervisor",
+                "messages": [{"role": "assistant", "content": f"✅ \033[1;32mOutput from {previous_node} passed with a score of {score}. Routing to Documentation/Supervisor to begin next task.\033[0m"}], 
+                "next": "Documentation",
                 "qa_retries": 0,
                 "results_list": results_list,
                 "working_results": []

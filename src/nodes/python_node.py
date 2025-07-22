@@ -84,10 +84,16 @@ class Node(NodeBase):
             explanation = code_response['args']['explanation']
             output_description = code_response['args']['output_description']
 
-            logger.info(f"[PYTHON PROGRAMMER] Generated pandas code:\n\n\033[1;30;47m{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
+            logger.info(f"\033[1;30;47m[PYTHON PROGRAMMER] Imports:\n\n{import_code}\n\nGenerated code:\n\n{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
             # Execute the code safely from fastAPI server
             try:
-                result = pd.DataFrame.from_dict(query_dataframe_agent(df, python_code))
+                result = query_dataframe_agent(df, python_code, imports=import_code)
+                if isinstance(result, dict) and "error_type" in result and "error_message" in result:
+                    error_str = f"Execution returned error: {result['error_type']}: {result['error_message']}.\nCode: {python_code}"
+                    return self._error_response(error_str)
+                else:
+                    result = pd.DataFrame.from_dict(result)
+
             except Exception as e:
                 logger.error(f"Execution error: {e}")
                 return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}.")
@@ -162,10 +168,11 @@ class Node(NodeBase):
             ***STRICT RULES (Always Follow These if using the GenerateCode tool):***
             - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
             - ✅ ALWAYS assign the final result to a single DataFrame named `result`. It must ALWAYS be a dataframe.
-            - ❌ NEVER use loops, file I/O, or print statements.
-            - ✅ Use only pandas and numpy operations.
+            - ❌ NEVER use file I/O, or print statements.
+            - ✅ Each import should be on its own separate line.
+            - ✅ Use only pandas (replacing pandas), numpy, and scipy operations. If using any of the functions in these libraries, double check to make sure the namespace is correct.
             - ✅ If the user’s task applies to only part of the DataFrame, return just the relevant rows or columns.
-            - ❌ Do not rename the columns in the dataframe.
+            - ❌ Do not rename any columns in the dataframe. When possible, keep previous column names.
 
             First, think step-by-step about how to perform the task using pandas, numpy and python code.
             Then, return only the final code inside a Python code block.
@@ -201,14 +208,10 @@ class Node(NodeBase):
 
     def _handle_result(self, result, import_code, python_code, explanation, output_description, df_index):
         """
-        Process the result returned by executing the generated pandas code.
+        Process the result returned by executing the generated code.
         """
         working_results = []
-        if isinstance(result, dict) and "error_type" in result and "error_message" in result:
-            error_str = f"Execution returned error: {result['error_type']}: {result['error_message']}.\nCode: {python_code}"
-            return self._error_response(error_str)
-        
-        elif isinstance(result, pd.DataFrame):
+        if isinstance(result, pd.DataFrame):
             return_file = f"{WORKING_DIRECTORY}{self.session_id}/{self.session_id}_{df_index}.csv"
             logger.info(f"\033[44m[PYTHON PROGRAMMER] Writing dataframe to {return_file}\033[0m")
             result.to_csv(return_file, index=False)
@@ -255,7 +258,7 @@ class Node(NodeBase):
         return {
             "next": "QA",
             "current": "PythonProgrammer",
-            "messages": [AIMessage(f"Pandas code executed successfully.\n\n{pretty_output}")],
+            "messages": [AIMessage(f"Code executed successfully.\n\n{pretty_output}")],
             "stashed_msg": stashed_msg,
             "working_results": working_results,
             "df_index": df_index,

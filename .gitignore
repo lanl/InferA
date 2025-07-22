@@ -138,16 +138,20 @@ cython_debug/
 lanlchain.pem
 config.py
 state/state.pkl
+state/old_state.pkl
 venv_*
 cache
 cache/*
+test.ipynb
 
 # helper shell scripts
 allocate_gpu.sh
 load_modules.sh
+launchJupyterlab.sh
 
 # intermediate data storage dir
 data_storage/*
+old_data_storage/*
 !data_storage/.placeholder
 
 # genericio library from Argonne National Lab
@@ -167,5 +171,6 @@ src/data/JSON/*
 
 logs/*
 *.log
+old_logs/*
 !logs
 !logs/.placeholder

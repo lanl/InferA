@@ -72,10 +72,10 @@ class Node(NodeBase):
             explanation = code_response['args']['explanation']
             output_description = code_response['args']['output_description']
 
-            logger.info(f"[VISUALIZATION] Generated code:\n\n\033[1;30;47m{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
+            logger.info(f"\033[1;30;47m[VISUALIZATION] Imports:\n\n{import_code}\n\nGenerated code:\n\n{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
             # Execute the code safely from fastAPI server
             try:
-                result = query_dataframe_agent(df, python_code)
+                result = query_dataframe_agent(df, python_code, imports=import_code)
             except Exception as e:
                 logger.error(f"Execution error: {e}")
                 return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}.")

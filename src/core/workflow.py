@@ -31,17 +31,20 @@ from src.core.state import State
 from src.nodes.node_base import NodeBase
 
 from src.nodes import (
-    dataloader_node, 
     human_feedback_node, 
-    verifier_node, 
     planner_node, 
     supervisor_node,
+
+    dataloader_node, 
     retriever_node,
+
     sql_node,
-    QA_node,
     python_node,
+    visualization_node,
+
+    QA_node,
+    documentation_node,
     summary_node,
-    visualization_node
 )
 
 from src.tools import (
@@ -95,13 +98,14 @@ class WorkflowManager:
         agents["HumanFeedback"] = human_feedback_node.Node()
         agents["QA"] = QA_node.Node(power_llm)
         agents["Summary"] = summary_node.Node(llm)
+        agents["Documentation"] = documentation_node.Node(llm)
 
         agents["Planner"] = planner_node.Node(power_llm)
-        agents["Verifier"] = verifier_node.Node(llm , self.tools["routing_tools"])
         agents["Supervisor"] = supervisor_node.Node(llm, self.tools["routing_tools"])
 
         agents["DataLoader"] = dataloader_node.Node(llm, self.tools["dataloader_tools"], self.tools["db_writer"])
         agents["Retriever"] = retriever_node.Node(embed_llm, server)
+
         agents["SQLProgrammer"] = sql_node.Node(llm)
         agents["PythonProgrammer"] = python_node.Node(llm, self.tools["python_tools"], self.tools["dataframe_tools"])
         agents["Visualization"] = visualization_node.Node(llm, self.tools["visual_tools"])
@@ -124,9 +128,9 @@ class WorkflowManager:
         self.workflow.add_node("HumanFeedback", self.agents["HumanFeedback"])
         self.workflow.add_node("QA", self.agents["QA"])
         self.workflow.add_node("Summary", self.agents["Summary"])
+        self.workflow.add_node("Documentation", self.agents["Documentation"])
 
         self.workflow.add_node("Planner", self.agents["Planner"])
-        # self.workflow.add_node("Verifier", self.agents["Verifier"])
         self.workflow.add_node("Supervisor", self.agents["Supervisor"])
 
         self.workflow.add_node("Retriever", self.agents["Retriever"])
@@ -156,7 +160,7 @@ class WorkflowManager:
             "Planner",
             lambda x: x["next"],
             {
-                "Supervisor": "Supervisor",
+                "Documentation": "Documentation",
                 "HumanFeedback": "HumanFeedback"
             }
         )
@@ -178,7 +182,7 @@ class WorkflowManager:
                 "DataLoaderTool": "DataLoaderTool",
                 "DBWriter": "DBWriter",
                 "Retriever": "Retriever",
-                "Supervisor": "Supervisor"
+                "Documentation": "Documentation"
             }
         )
 
@@ -238,15 +242,13 @@ class WorkflowManager:
 
         self.workflow.add_edge("SQLProgrammer", "QA")
 
-        
-
         self.workflow.add_conditional_edges(
             "RoutingTool",
             lambda x: x["next"],
             {
                 "Planner": "Planner",
                 "DataLoader": "DataLoader",
-                "Supervisor": "Supervisor",
+                "Documentation": "Documentation",
                 "SQLProgrammer": "SQLProgrammer",
                 "PythonProgrammer": "PythonProgrammer",
                 "Visualization": "Visualization",
@@ -261,31 +263,21 @@ class WorkflowManager:
             {}
         )
 
-        # self.workflow.add_conditional_edges("HumanFeedback", 
-        #     lambda x: x["next"],
-        #     {
-        #         "Supervisor": "Supervisor",
-        #         "DataLoader": "DataLoader",
-        #         "Planner": "Planner",
-        #         "Verifier": "Verifier",
-        #         "SQLProgrammer": "SQLProgrammer",
-        #         "END": END
-        #     }
-        # )
-
-        self.workflow.add_edge("Summary", "Supervisor")
+        self.workflow.add_edge("Summary", "Documentation")
 
         self.workflow.add_conditional_edges(
             "QA",
             lambda x: x["next"],
             {   
-                "Supervisor": "Supervisor",
+                "Documentation": "Documentation",
                 "SQLProgrammer": "SQLProgrammer",
                 "DataLoader": "DataLoader",
                 "PythonProgrammer": "PythonProgrammer",
                 "Visualization": "Visualization"
             }
         )
+
+        self.workflow.add_edge("Documentation", "Supervisor")
 
         self.workflow.add_conditional_edges(
             "Retriever",

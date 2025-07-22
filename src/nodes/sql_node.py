@@ -32,14 +32,14 @@ class Node(NodeBase):
         df_index = state.get("df_index", 0)
 
         if not db_path:
-            logger.warning(f"[SQL PROGRAMMER] Database has not been written. Routing back to supervisor.")       
-            return {"next": "Supervisor", 
+            logger.warning(f"[SQL PROGRAMMER] Database has not been written. Routing back to documentation/supervisor.")       
+            return {"next": "Documentation", 
                     "current": "SQLProgrammer", 
                     "messages": [AIMessage("Database is missing. Check with DataLoader to verify.")]
                 }
         if not db_tables:
-            logger.warning(f"[SQL PROGRAMMER] Database has no tables. Routing back to supervisor.")       
-            return {"next": "Supervisor", 
+            logger.warning(f"[SQL PROGRAMMER] Database has no tables. Routing back to documentation/supervisor.")       
+            return {"next": "Documentation", 
                     "current": "SQLProgrammer", 
                     "messages": [AIMessage("Database has no tables. Check with DataLoader to verify.")]
                 }
@@ -167,7 +167,7 @@ class Node(NodeBase):
         5. Optionally ORDER BY a meaningful column for significant examples.
         6. Use valid {dialect} SQL syntax.
         7. Do not modify data (no INSERT, UPDATE, DELETE, DROP, etc.).
-        8. Do not rename the columns.
+        8. Do not rename the columns. Do not create a view.
         
         You may provide multiple independent SQL queries separated by semicolons if required.
         However, your job is not to do analysis, only to filter the data.

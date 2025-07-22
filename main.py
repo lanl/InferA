@@ -4,6 +4,7 @@
 
 import os
 import time
+import json
 import threading
 import uvicorn
 import pickle
@@ -43,7 +44,7 @@ class MultiAgentSystem:
         # Start FastAPI server in background
         server_thread = threading.Thread(target=self.setup_sandbox, daemon=True)
         server_thread.start()
-        self.logger.info("FastAPI server running at http://127.0.0.1:8000")
+        self.logger.info("FastAPI server running at http://127.0.0.1:3000")
         time.sleep(1)
 
         if not os.path.exists(WORKING_DIRECTORY):
@@ -58,6 +59,7 @@ class MultiAgentSystem:
             os.makedirs("./state/")
             self.logger.debug(f"Created state dictionary directory: ./state/")
         
+        
         # load previous state if it exists
         try:
             with open(STATE_DICT_PATH, 'rb') as file:
@@ -70,7 +72,7 @@ class MultiAgentSystem:
 
 
     def setup_sandbox(self):
-        uvicorn.run("src.core.fastapi_server:app", host="127.0.0.1", port=8000, reload=False, log_level="info")
+        uvicorn.run("src.core.fastapi_server:app", host="127.0.0.1", port=3000, reload=False, log_level="info")
 
 
     def cleanup(self):
@@ -159,30 +161,20 @@ class MultiAgentSystem:
 
 
 def main():
-    session = "17"
+    session = "11001"
     step = "0"
-    # session_id = None
     system = MultiAgentSystem(session = session, step = step)
 
-    # user_input = input("You: ")
+    question_id = 11
 
-    # user_input = "Can you plot the change in mass of the largest friends-of-friends halos for all timesteps in simulation 0? Provide me two plots using both fof_halo_count and fof_halo_mass as metrics for mass."
-    # user_input = "Visualize all halos within 20 Mpc of the halo with fof_halo_tag = '251375070' for timestep 498 of simulation 0."
-    # user_input = "Can you find me the top 20 largest friends-of-friends halos from timestep 498 in simulation 0?"
-    # user_input = "I want to visualize the top 20 largest friends-of-friends halos from timestep 498 in simulation 0? Use the halo center as coordinates for visualization."
-    # user_input = "Find me the 10 friends-of-friends halos closest in coordinates to the halo with fof_halo_tag = '251375070' in timestep 498 of simulation 0. Use columns 'fof_halo_tag', 'fof_halo_center_x', 'fof_halo_center_y', 'fof_halo_center_z'."
-    # user_input = "Can you map out the largest friends-of-friends halos for all timesteps in simulation 0?"
-    # user_input = "A leading theory in cosmology is that galaxies form in dark matter halos. It would be interesting to know the characteristics of galaxies that form in the largest halos. What are the top 10 largest galaxies in the largest halo in timestep 498 of simulation 0? What are their characteristics?"
-    # user_input = "Can you plot the time series change over time of the largest galaxy in simulation 2?"
-    # user_input = "Can you plot a vtk of all the halos within 10 Mpc of the largest halo at timestep 498 of simulation 0?"
-    # user_input = "Can you plot a timeseries pvd for all the largest halos at every timestep in simulation 0? At each timestep also include every halo within a distance of 10 Mpc."
-    # user_input = "Visualize all halos within 10 Mpc of the coordinate (20,20,20) for timestep 498 of simulation 0."
-    # user_input = "Across all simulations, what is the average fof_halo_count of halos at the highest timestep?"
+    with open("src/data/example_questions.json", "r", encoding='utf-8') as f:
+        data = json.load(f)    
     
-    # user_input = "Track the evolution of halo with fof_halo_tag = '251375070' from timestep 498 of simulation 0 through all timesteps."
-    user_input = "A theory in cosmology is that the galaxies form in halos. I would be interested in seeing if the largest galaxies might form in the largest halos. Please find the largest 100 galaxies and 100 halos at timestep 498. I would like to plot all of them in Paraview and also see how well aligned those galaxies and halos are to each other."
+    user_input = ""
+    for question in data.get("questions", []):
+        if question.get("id") == question_id:
+            user_input = question.get("text")
 
-    
     system.run(user_input)
 
 

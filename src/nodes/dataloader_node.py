@@ -189,8 +189,8 @@ class Node(NodeBase):
 
             user_input = ""
             approved = False
-
-            while not approved:
+            counter = 0 
+            while not approved or counter < 3:
                 response = self.chain_write.invoke({
                     "task": task, 
                     "context": retrieved_docs[obj], 
@@ -198,6 +198,7 @@ class Node(NodeBase):
                     "description": obj_description,
                     "user_input": user_input,
                 })
+                counter += 1
                 if not response.tool_calls:
                     logger.warning(f"[DATALOADER] No tools called. Routing to human feedback for more info.")
                     return {"messages": [response], "current_obj": current_obj, "next": "HumanFeedback", "current": "DataLoader"}
@@ -215,11 +216,11 @@ class Node(NodeBase):
                 else:
                     user_input = "\n".join([user_input, feedback.content])
             
-        # If all required steps completed, signal success and move to Supervisor
+        # If all required steps completed, signal success and move to Documentation
         if retrieved_docs and file_index and db_path:
             logger.debug(f"[DATALOADER] All dataloading tasks complete.")
             return {
                 "messages": [AIMessage(f"✅ \033[1;32mAll dataloading tasks completed. Loaded in necessary data, and wrote to: \n{db_path}\033[0m")], 
-                "next": "Supervisor", 
+                "next": "Documentation", 
                 "current": "DataLoader"
             }

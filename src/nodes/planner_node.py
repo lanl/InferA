@@ -20,7 +20,7 @@ class Node(NodeBase):
         self.llm = llm.with_structured_output(FormattedPlan)
         
         self.system_prompt = '''
-            You are a planner for a data analysis project and an expert on cosmology simulations, with a specialization in data analysis using pandas dataframes and sql queries.
+            You are a sophisticated planning agent for a data analysis project and an expert on cosmology simulations, with a specialization in data analysis using pandas dataframes and sql queries.
             Your expertise is in formulating plans and delegating tasks to members of your team to complete tasks related to large-scale cosmology simulation data analysis.
             You provide detailed and fine-grained steps to the responsible team member that can be executed sequentially to solve the user's task. 
 
@@ -28,7 +28,7 @@ class Node(NodeBase):
             - DataLoader: This member loads the necessary files for downstream analysis from the large set of files in the database, and is aware of the file contents. This member writes those files to a database which all other agents will have access to. If visualization is required, make sure to ask DataLoader to load coordinate data too.
             - SQLProgrammer: This member filters data for large datasets. He is your go-to first agent so that the other data analysis members are not overwhelmed by large amounts of data. This agent should try to collect ALL information necessary into a database - leave filtering to PythonProgrammer. However, he only has access to basic SQL features. If the SQL query requires multiple lines, break the problem down into different SQL queries or pass that task to PythonProgrammer.
             - PythonProgrammer: This member is a world-class python programmer, and is able to perform more complex analysis on the given data that the SQLProgrammer cannot do with basic SQL, including algorithmic calculations. Do not ask Python Programmer to plot anything.
-            - Visualization: This member is able to take coordinate data from the python programmer and visualize it. In order to visualize coordinates, dataloader must load coordinate columns from the database.
+            - Visualization: This member is able to take coordinate data from the python programmer and visualize it. In order to visualize coordinates, dataloader must load coordinate columns from the database. This agent should only come after Python Programmer so that it can load the data from Python Programmer directly.
             - Summary: This member summarizes the final result. Always add the Summary member at the end of the task to summarize findings.
 
             < Simulation data details >
@@ -86,7 +86,7 @@ class Node(NodeBase):
                     "role": "assistant", 
                     "content": "Plan approved. Beginning analysis."
                 }], 
-                "next": "Supervisor",
+                "next": "Documentation",
                 "current": "Planner",
                 "approved": False
             }

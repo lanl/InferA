@@ -5,13 +5,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def query_dataframe_agent(df: pd.DataFrame, pandas_code: str, api_url: str = "http://127.0.0.1:8000") -> str:
+def query_dataframe_agent(df: pd.DataFrame, pandas_code: str, imports: str, api_url: str = "http://127.0.0.1:3000") -> str:
     """
-    Send a DataFrame and a prompt to the FastAPI agent server and return the response.
+    Send a DataFrame, pandas code, and imports to the FastAPI agent server and return the response.
 
     Args:
         df (pd.DataFrame): The DataFrame to send.
         pandas_code (str): The pandas code to be executed on the server.
+        imports (str): The import statements, each on a separate line.
         api_url (str): Base URL of the FastAPI server.
 
     Returns:
@@ -23,7 +24,7 @@ def query_dataframe_agent(df: pd.DataFrame, pandas_code: str, api_url: str = "ht
             df.to_csv(tmp.name, index=False)
             with open(tmp.name, 'rb') as file:
                 files = {'file': file}
-                data = {'pandas_code': pandas_code}
+                data = {'pandas_code': pandas_code, 'imports': imports}
                 logger.debug(f"[SANDBOX CLIENT] Preparing to send POST request. Data: {data}, df tempfile: {files}.")
                 query_res = requests.post(f"{api_url}/query/", files=files, data=data)
 

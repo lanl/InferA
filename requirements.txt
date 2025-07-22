@@ -27,6 +27,7 @@ duckdb
 
 pandas
 numpy
+scipy
 plotly
 typer
 tqdm

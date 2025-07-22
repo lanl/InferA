@@ -20,7 +20,7 @@ We've developed a multi-agent approach to break down complex data analysis tasks
 4. Python Agent: Performs logic-intensive analysis and computation
 5. Visualization Agent: Generates task-specific plots (e.g., Paraview visualizations)
 
-![alt text](InferA/infera-workflow.png "Infera Workflow")
+![alt text](infera-workflow.png "Infera Workflow")
 
 ## Key Features
 - Human-in-the-Loop: Allows continuous human feedback and supervision
@@ -30,21 +30,6 @@ We've developed a multi-agent approach to break down complex data analysis tasks
 - Optimized Token Usage: Efficient agent communication (Average run: <40,000 tokens, ~$0.09 with GPT-4)
 
 # Getting Started
-
-
-# Contact
-
-
-
-O# (O4923)
-
-© 2025. Triad National Security, LLC. All rights reserved.
-
-This program was produced under U.S. Government contract 89233218CNA000001 for Los Alamos National Laboratory (LANL), which is operated by Triad National Security, LLC for the U.S. Department of Energy/National Nuclear Security Administration. All rights in the program are reserved by Triad National Security, LLC, and the U.S. Department of Energy/National Nuclear Security Administration. The Government is granted for itself and others acting on its behalf a nonexclusive, paid-up, irrevocable worldwide license in this material to reproduce, prepare. derivative works, distribute copies to the public, perform publicly and display publicly, and to permit others to do so.
-
-
-
-
 
 # Setting up local ollama
 
@@ -96,7 +81,9 @@ python -m pip install -r requirements.txt
 # Add genericio module
 
 1. If you haven't setup remote_gio_explorer yet, do that. I copied the genericio directory here to import.
-
+```
+git clone git@gitlab.lanl.gov:exasky/remote_gio_explorer.git # or git clone https://gitlab.lanl.gov/exasky/remote_gio_explorer.git 
+```
 
 # Running
 
@@ -130,3 +117,14 @@ source venv_InferA/bin/activate
 
 5. Run main.py or any of the test_*.ipynb
 
+# Contact
+
+
+
+# LICENSE
+
+O# (O4923)
+
+© 2025. Triad National Security, LLC. All rights reserved.
+
+This program was produced under U.S. Government contract 89233218CNA000001 for Los Alamos National Laboratory (LANL), which is operated by Triad National Security, LLC for the U.S. Department of Energy/National Nuclear Security Administration. All rights in the program are reserved by Triad National Security, LLC, and the U.S. Department of Energy/National Nuclear Security Administration. The Government is granted for itself and others acting on its behalf a nonexclusive, paid-up, irrevocable worldwide license in this material to reproduce, prepare. derivative works, distribute copies to the public, perform publicly and display publicly, and to permit others to do so.
