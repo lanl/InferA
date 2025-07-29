@@ -19,18 +19,15 @@ class Node(NodeBase):
             1. Read the response from the previous agent carefully.
             2. Determine the next step based on the pre-written plan and the previous agent's output.
             3. Redirect to the appropriate agent for the next task using the Routing Tool.
-            4. If clarification is needed, redirect to HumanFeedback.
 
-            - Redirect ONLY one of the following per step: DataLoader, SQLProgrammer, PythonProgrammer, Visualization, HumanFeedback, Summary or END 
+            - Redirect ONLY one of the following per step: DataLoader, SQLProgrammer, PythonProgrammer, Visualization, Summary or END 
             - Stick strictly to the pre-written plan unless HumanFeedback suggests a change.
-            - If the previous agent's response indicates an error or unexpected result, redirect to HumanFeedback for guidance and route back to previous agent.
 
             < TEAM MEMBERS >
             - DataLoader: Loads and manages data files.
             - SQLProgrammer: Writes and executes SQL queries and data filtering.
             - PythonProgrammer: Writes and executes python code for complex calculations and analyses.
             - Visualization: Creates visual representations of data.
-            - HumanFeedback: Provides clarification or additional information.
             - Summary: Summarizes results at the end of the task.
             - END: Indicates the completion of all tasks.
 
@@ -48,6 +45,10 @@ class Node(NodeBase):
 
             Respond with the redirection and the next subtask based on the plan and the previous response.
             """
+
+                    # - HumanFeedback: Provides clarification or additional information.
+                    #             - If the previous agent's response indicates an error or unexpected result, redirect to HumanFeedback for guidance and route back to previous agent.
+                    # 4. If clarification is needed, redirect to HumanFeedback.
 
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("system", self.system_prompt),
@@ -76,8 +77,6 @@ class Node(NodeBase):
 
         if previous_node in ["HumanFeedback"]:
             user_input = user_input[-1]
-        else:
-            user_input = ""
 
         # task to be sent to agents is updated in the tool along with the routing
         response = self.chain.invoke({'message': messages[-MESSAGE_HISTORY:],'plan': plan, 'previous_member': previous_node, 'previous_response': stashed_msg, 'user_feedback': user_input})

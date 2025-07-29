@@ -24,7 +24,7 @@ class MultiAgentSystem:
     def __init__(self, session: str = None, step: str = "0"):
         self.start_time = time.time()
         self.end_time = None
-        self.logger = setup_logger(print_debug_to_console=PRINT_DEBUG_TO_CONSOLE)
+        self.logger = setup_logger(session = session, print_debug_to_console=PRINT_DEBUG_TO_CONSOLE,)
 
         self.session = session
         self.step = step
@@ -83,9 +83,6 @@ class MultiAgentSystem:
             with open(STATE_DICT_PATH, "wb") as f:
                 pickle.dump(self.state_dict, f)
                 self.logger.info(f"[SESSION] All streamed steps saved to {STATE_DICT_PATH}.")
-        
-        self.end_time = time.time()
-        self.logger.info(f"Total time server was running - took {self.end_time - self.start_time:.4f} seconds to run.")
         
         
     def run(self, user_input: str) -> None:
@@ -153,6 +150,9 @@ class MultiAgentSystem:
                             self.logger.info(f"State saved to : {new_state_key}.\n")
                         else:
                             self.logger.info(f"Step save disabled.\n")
+                    
+                    self.end_time = time.time()
+                    self.logger.info(f"Time server was running - {self.end_time - self.start_time:.4f} seconds.")
 
                 except Exception as e:
                     self.logger.error(f"Unable to print message {k}:{v}. {e}")
@@ -161,21 +161,51 @@ class MultiAgentSystem:
 
 
 def main():
-    session = "11001"
+    base_session = 20322  # Starting session number
     step = "0"
-    system = MultiAgentSystem(session = session, step = step)
-
-    question_id = 11
-
-    with open("src/data/example_questions.json", "r", encoding='utf-8') as f:
-        data = json.load(f)    
+    question_id = 20
     
+    # Load the questions
+    with open("src/data/example_questions.json", "r", encoding='utf-8') as f:
+        data = json.load(f)
+    
+    # Find the question with the specified ID
     user_input = ""
     for question in data.get("questions", []):
         if question.get("id") == question_id:
             user_input = question.get("text")
+            break
+    
+    if not user_input:
+        print(f"Question with ID {question_id} not found!")
+        return
+    
+    # Run the system 10 times with incrementing session numbers
+    for i in range(8):
+        session = str(base_session + i)
+        print(f"Running iteration {i+1}/10 with session {session}")
+        
+        # Create and run the system
+        system = MultiAgentSystem(session=session, step=step)
+        system.run(user_input)
+        
+        print(f"Completed iteration {i+1}/10")
 
-    system.run(user_input)
+    # session = "14400"
+    # step = "0"
+    # system = MultiAgentSystem(session = session, step = step)
+
+    # question_id = 14
+
+    # with open("src/data/example_questions.json", "r", encoding='utf-8') as f:
+    #     data = json.load(f)    
+    
+    # user_input = ""
+    # for question in data.get("questions", []):
+    #     if question.get("id") == question_id:
+    #         user_input = question.get("text")
+
+    # system.run(user_input)
 
 
 

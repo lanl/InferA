@@ -19,6 +19,7 @@ def redirect(
     return Command(update={
         "current": "RoutingTool",
         "next": next,
+        "base_task": task,
         "task": task,
         "messages": [
             ToolMessage(

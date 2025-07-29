@@ -36,7 +36,7 @@ class Node(NodeBase):
         object_type = state.get("object_type", None)
         plan = state["plan"]
 
-        query = f"[IMPORTANT] Retrieve names marked as important.\nUser input: {user_inputs}\nTask: {task}\n\n{plan}."
+        # query = f"[IMPORTANT] Retrieve names marked as important.\nUser input: {user_inputs}\nTask: {task}\n\n{plan}."
         all_docs = {}
         total_docs = 0
 

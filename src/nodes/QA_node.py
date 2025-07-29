@@ -18,12 +18,6 @@ class FormattedReview(TypedDict):
                     "Consider factors like accuracy, completeness, and relevance to the task."
     )
     original_task: str = Field(...,description="Provide the original task.")
-    # user_request: str = Field(...,
-    #     description="Describe specific feedback the user provided, if any. "
-    #                 "Include both explicit feedback and any implicit expectations or "
-    #                 "requirements inferred from the user's query."
-    # )
-    # critique: str = Field(..., description="Clearly identifies what is missing, incorrect, or poorly executed in the output. Structure this as: 1) Strengths, 2) Weaknesses, 3) Areas for improvement.")
     revisions: str = Field(...,description="Clearly list specific, actionable revisions necessary to improve the output. Prioritize these revisions based on their potential impact.")
     before_example: str = Field(..., description="Provide a small snippet of where the error in the code is occuring.")
     after_example: str = Field(..., description="Provide an example of changes to the before_example code snippet that would fix the output.")
@@ -34,12 +28,13 @@ class Node(NodeBase):
     def __init__(self, llm):
         super().__init__("QA")
         self.llm = llm.with_structured_output(FormattedReview)
-        self.system_prompt = """
+        self.system_prompt = (
+            """
             You are a Quality Assurance (QA) expert specialized in pandas, SQL, and scientific data workflows for cosmology simulation analysis projects.
 
             < ROLE >
-            Evaluate the latest agent response to determine if it fully and correctly completes the assigned data analysis task based on its output and user feedback.
-
+            Evaluate the latest agent response to determine if it fully and correctly completes the assigned data analysis task based on its output, execution results, and user feedback.
+            
             < GRADING >
             1. Assign a numeric grade between 1 and 100:
             - 100: Perfect and fully complete
@@ -54,19 +49,16 @@ class Node(NodeBase):
             2. Provide clear, actionable feedback that directly revises the agent's output.
             3. Use user feedback to outline changes necessary.
             4. Sometimes the error is caused by a small syntax error. If so, just provide feedback on that.
-
+            5. When providing code corrections, ensure they follow the Python agent's strict rules.
+            6. Output does not have to include a dataframe. If no dataframe or result found, check code for evaluation.
+            
             < OUTPUT FROM PREVIOUS AGENT >
-            Task assigned:
+            Original task assigned:
             '''
             {task}
             '''
 
-            Agent who completed the task: {member}
-
-            Agent's last output:
-            '''
             {stashed_msg}
-            '''
 
             User feedback:
             '''
@@ -76,6 +68,7 @@ class Node(NodeBase):
 
             Respond only with JSON.
             """
+        )
 
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("system", self.system_prompt),
@@ -88,6 +81,7 @@ class Node(NodeBase):
     def run(self, state):
         previous_node = state["current"]
         task = state["task"]
+        base_task = state.get("base_task", task)
         messages = state["messages"]
 
         stashed_msg = state.get("stashed_msg", "")
@@ -97,14 +91,15 @@ class Node(NodeBase):
         working_results = state.get("working_results", [])
         
         # When qa_retries matches reset_retry, reset once.
-        reset_retry = 2
-        max_retries = 20
+        reset_retry = 2 # reset every other n retries
+        max_retries = 4
         threshold = 50
-
-        feedback, approved = human_feedback(stashed_msg)
         if DISABLE_FEEDBACK:
             approved = None
             feedback = ""
+        else:
+            feedback, approved = human_feedback(stashed_msg)
+        
 
         response = self.chain.invoke({
             'message': messages[-MESSAGE_HISTORY:], 
@@ -135,6 +130,7 @@ class Node(NodeBase):
             summary = ""
             confidence = 0
         
+        logger.info(f"[QA] EVALUATION\n   Score: {score}\n    Confidence: {confidence}\n\n")
         # revised_task = f"< INITIAL TASK >\n{task}\n\n< Critiques >\n{critique}\n\n< REVISIONS NEEDED >\n{revisions}\n\n"
         revised_task = f"""
             ORIGINAL TASK: {original_task}
@@ -153,19 +149,22 @@ class Node(NodeBase):
         logger.debug(revised_task)
 
         if score < threshold:
-            logger.info(f"Overall score: {score}\n\nSummary of changes:\n{summary}\n\nRevisions:\n{revisions}\n\n")
+            logger.info(f"Summary of changes:\n{summary}\n\nRevisions:\n{revisions}\n\n")
             qa_retries += 1
+
             if qa_retries > max_retries:
                 return {
-                    "messages": [{"role": "assistant", "content": f"❌ \033[1;31mMaximum QA retries reached with score {score}. Failed to complete the task: {task}\n\n. Escalating to Documentation/Supervisor.\033[0m"}],
+                    "messages": [{"role": "assistant", "content": f"❌ \033[1;31mMaximum QA retries reached with score {score}. Failed to complete the task: {task}\n\n. Escalating to Supervisor.\033[0m"}],
                     "task": revised_task,
                     "next": "Documentation",
                     "qa_retries": 0,
                 }
-            if qa_retries%reset_retry==0:
+            should_reset = qa_retries % 2 == 0
+            if should_reset:
+                logger.info(f"[QA] Resetting task from clean slate after {qa_retries}.")
                 return {
                     "messages": [{"role": "assistant", "content": f"⚠️ \033[1;31mOutput from {previous_node} failed with a score of {score}. Routing back to {previous_node}. Resetting task for retries."}], 
-                    "task": task,
+                    "task": base_task,
                     "next": previous_node,
                     "qa_retries" : qa_retries
                 }

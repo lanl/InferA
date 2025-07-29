@@ -6,6 +6,7 @@ logger = logging.getLogger(__name__)
 class GenerateCode(BaseModel):
     """Use this tool to generate code if other specific tools are not made to accomplish the task."""
     imports: str = Field(description = "Code Block import statements.")
+    load_csv_code: str = Field(description = "Code to load csv into a pandas dataframe called input_df.")
     python_code: str = Field(description = "Python code using pandas to process or analyze the input DataFrame, input_df.")
     explanation: str = Field(description = "Brief explanation of what the code is doing.")
     output_description: str = Field(description="Briefly describe what the output is and what it looks like.")

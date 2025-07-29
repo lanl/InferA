@@ -20,12 +20,17 @@ class ConsoleFormatter(logging.Formatter):
         else:
             return f"[{record.levelname}] {record.getMessage()}"
 
-def setup_logger(print_debug_to_console: bool = False, enable_trace: bool = False):
+def setup_logger(session: str, print_debug_to_console: bool = False, enable_trace: bool = False):
     LOG_DIR = "logs"
     os.makedirs(LOG_DIR, exist_ok=True)
 
-    log_filename = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".log"
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_filename = timestamp + ".log"
     log_path = os.path.join(LOG_DIR, log_filename)
+
+    # Create separate file for INFO level logs
+    info_filename = session + "_INFO.log"
+    info_log_path = os.path.join(LOG_DIR, info_filename)
 
     root_logger = logging.getLogger()
     if root_logger.hasHandlers():
@@ -36,10 +41,19 @@ def setup_logger(print_debug_to_console: bool = False, enable_trace: bool = Fals
 
     # File handler
     file_formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S")
-    file_handler = logging.FileHandler(log_path)
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
     file_handler.setLevel(TRACE_LEVEL_NUM if enable_trace else logging.DEBUG)
     file_handler.setFormatter(file_formatter)
     root_logger.addHandler(file_handler)
+
+    # INFO-only file handler - logs only INFO level and above
+    info_file_formatter = logging.Formatter("[%(asctime)s] %(message)s", "%Y-%m-%d %H:%M:%S")
+    info_file_handler = logging.FileHandler(info_log_path, encoding="utf-8")
+    info_file_handler.setLevel(logging.INFO)
+    info_file_handler.setFormatter(info_file_formatter)
+    # Add a filter to only include INFO level logs
+    info_file_handler.addFilter(lambda record: record.levelno == logging.INFO)
+    root_logger.addHandler(info_file_handler)
 
     # Console handler
     console_handler = logging.StreamHandler()

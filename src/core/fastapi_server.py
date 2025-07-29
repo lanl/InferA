@@ -8,6 +8,10 @@ import matplotlib.pyplot as plt
 import pyvista as pv
 import scipy
 
+import tempfile
+import os
+import uuid
+
 import logging
 import builtins
 import sys
@@ -56,84 +60,109 @@ async def query_agent(request: Request, pandas_code: str = Form(...), imports: s
         'input_df': df.copy()
     }
 
+    # Main try-except block
     try:
         combined_code = f"{imports}\n\n{pandas_code}"
-    
+
         exec(combined_code, safe_globals, local_vars)
         result = local_vars.get("result")
 
-        # result = eval(pandas_code, {"df": df, "pd": pd})
         logger.info(f"[SANDBOX SERVER] Pandas code executed successfully on server.")
         logger.debug(f"[SANDBOX SERVER]      - Result type: {type(result)}")
+
+        # Create a temporary file to store the result
+        temp_dir = tempfile.gettempdir()
+        file_uuid = str(uuid.uuid4())
+        file_path = os.path.join(temp_dir, f"{file_uuid}.csv")
         
         # Convert the result to a JSON-serializable format
         if isinstance(result, pd.DataFrame):
             logger.debug(f"[SANDBOX SERVER]      - Result DataFrame shape: {result.shape}\n")
-            response = result.to_dict(orient='records')
-            # response = result.to_dict(orient='list')
+            result.to_csv(file_path, index=False)
+            return {"file_path": file_path, "type": "dataframe"}
         elif isinstance(result, pd.Series):
-            response = result.to_dict()
+            pd.DataFrame(result).to_csv(file_path, index=False)
+            return {"file_path": file_path, "type": "series"}
         elif isinstance(result, str):
-            response = result
+            return {"raw_result": result, "file_path": "", "type": "string"}
         elif result is None:
-            response = None
+            return {"raw_result": "", "file_path": "", "type": "none"}
         else:
-            response = str(result)
-        return {"response": response}
-    
-    except NameError as e:
-        logger.error(f"[SANDBOX SERVER] NameError: {str(e)}", exc_info=True)
-        return {
-            "response": {
-                "error_type": type(e).__name__, 
-                "error_message": f"NameError: {str(e)}. This might be due to an undefined variable or function."
-                }
-            }
-    
-    except AttributeError as e:
-        logger.error(f"[SANDBOX SERVER] AttributeError: {str(e)}", exc_info=True)
-        return {
-            "response": {
-                "error_type": type(e).__name__, 
-                "error_message": f"AttributeError: {str(e)}. This might be due to calling a non-existent method or accessing a non-existent attribute."
-                }
-            }
-    
-    except ValueError as e:
-        logger.error(f"[SANDBOX SERVER] ValueError: {str(e)}", exc_info=True)
-        return {
-            "response": {
-                "error_type": type(e).__name__, 
-                "error_message": f"ValueError: {str(e)}. This might be due to invalid input or operation."
-                }
-            }
-    
-    except SyntaxError as e:
-        logger.error(f"[SANDBOX SERVER] SyntaxError: {str(e)}", exc_info=True)
-        return {
-            "response": {
-                "error_type": type(e).__name__, 
-                "error_message": f"There's a syntax error in the provided code: {str(e)}"
-                }
-            }
-    except Exception as e:
-        logger.error(f"[SANDBOX SERVER] Execution error: {str(e)}", exc_info=True)
-        error_type = type(e).__name__
-        error_traceback = traceback.format_exc()
-        return {
-            "response": {
-                "error_type": type(e).__name__, 
-                "error_message": error_traceback
-                }
-            }
-    except Exception as e:
-        logger.error(f"[SANDBOX SERVER] Execution error: {str(e)}", exc_info=True)
-        return {
-            "response": {
-                "error_type": type(e).__name__, 
-                "error_message": f"Code execution error: {str(e)}"
-                }
-            }
-    
+            # For other types, convert to string
+            return {"raw_result": result, "file_path": "", "type": "other"}
+
+    except (NameError, AttributeError, ValueError, SyntaxError, Exception) as e:
+        return handle_exception(e, combined_code)
+
     finally:
         logger.info("[SANDBOX SERVER] Request processing completed")
+
+
+def extract_problematic_code(combined_code, line_number, context_lines=3):
+    """Extract code context around the problematic line."""
+    code_lines = combined_code.split('\n')
+    start_line = max(0, line_number - context_lines)
+    end_line = min(len(code_lines), line_number + context_lines)
+    
+    # Add line numbers to the code snippet
+    return "\n".join([f"{i+start_line+1}: {line}" for i, line in 
+                     enumerate(code_lines[start_line:end_line])])
+
+
+def handle_exception(e, combined_code):
+    """Common exception handling logic."""
+    error_type = type(e).__name__
+    error_message = str(e)
+    
+    if isinstance(e, SyntaxError):
+        # Handle syntax errors specially since they have line/offset information
+        line_number = e.lineno
+        offset = e.offset
+        text = e.text
+        
+        problematic_code = extract_problematic_code(combined_code, line_number)
+        
+        # Add a pointer to the exact error position
+        if text and offset:
+            code_lines = problematic_code.split('\n')
+            # Find the line with the error (should be in the middle of the context)
+            for i, line in enumerate(code_lines):
+                if line.startswith(f"{line_number}:"):
+                    # Calculate the position for the pointer
+                    prefix_length = len(str(line_number)) + 2  # "line_number: "
+                    pointer_line = " " * prefix_length + " " * (offset - 1) + "^"
+                    code_lines.insert(i + 1, pointer_line)
+                    break
+            problematic_code = "\n".join(code_lines)
+        
+        error_message = f"There's a syntax error in the provided code: {error_message}"
+    else:
+        # For other exceptions, use traceback to find the line number
+        tb = sys.exc_info()[2]
+        while tb.tb_next:
+            tb = tb.tb_next
+        
+        line_number = tb.tb_lineno
+        problematic_code = extract_problematic_code(combined_code, line_number)
+        
+        # Add specific context based on error type
+        if error_type == "NameError":
+            error_message = f"{error_message}. This might be due to an undefined variable or function."
+        elif error_type == "AttributeError":
+            error_message = f"{error_message}. This might be due to calling a non-existent method or accessing a non-existent attribute."
+        elif error_type == "ValueError":
+            error_message = f"{error_message}. This might be due to invalid input or operation."
+    
+    logger.error(f"[SANDBOX SERVER] {error_type}: {error_message}", exc_info=True)
+    
+    # For general exceptions, include the full traceback
+    if error_type not in ["NameError", "AttributeError", "ValueError", "SyntaxError"]:
+        error_traceback = traceback.format_exc()
+        error_message = error_traceback
+    
+    return {
+        "error_type": error_type,
+        "error_message": error_message,
+        "problematic_code": problematic_code,
+        "line_number": line_number
+    }

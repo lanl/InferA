@@ -1,19 +1,22 @@
 import os
 import logging
-from typing import List, TypedDict
+from typing import List, TypedDict, Optional
 from pydantic import Field
 
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.nodes.node_base import NodeBase
-from config import MESSAGE_HISTORY, WORKING_DIRECTORY
+from config import MESSAGE_HISTORY, WORKING_DIRECTORY, DISABLE_DOCUMENTATION
 
 logger = logging.getLogger(__name__)
 
 class DocumentationResponse(TypedDict):
-    agent: str = Field(..., description="List of agents involved.")
-    documentation: str = Field(..., description="A detailed documentation of steps performed by the previous agents since last documentation.")
+    agent: str = Field(..., description="Name of the agent providing this documentation")
+    task: str = Field(..., description="Description of the task being performed")
+    details: str = Field(..., description="Detailed explanation of what was done, findings, and next steps")
+    code: Optional[str] = Field(None, description="Any code that was generated or modified")
+    challenges: Optional[str] = Field(None, description="Challenges encountered during the task")
 
 class Node(NodeBase):
     def __init__(self, llm):
@@ -51,6 +54,9 @@ class Node(NodeBase):
 
     
     def run(self, state):
+        if DISABLE_DOCUMENTATION:
+            return {"messages": [AIMessage("Documentation skipped.")]}
+
         session_id = state.get("session_id", "")
         filename = f"{WORKING_DIRECTORY}{session_id}/documentation.txt"
 
@@ -61,29 +67,47 @@ class Node(NodeBase):
         stashed_msg = state.get("stashed_msg", "")
 
         response = self.chain.invoke({'message': messages[-MESSAGE_HISTORY:],'plan': plan, 'stashed_msg': stashed_msg, 'last_documentation': last_documentation})
-        last_documentation = response["documentation"]
-        self.append_documentation_to_file(response, filename)
+        last_documentation = self.append_documentation_to_file(response, filename, messages[0].content)
 
-        return {"messages": [AIMessage("Documentation has been recorded.")], "next": "Supervisor", "last_documentation": last_documentation}
+        return {"messages": [AIMessage("Documentation has been recorded.")], "last_documentation": last_documentation}
     
     
-    def append_documentation_to_file(self, response, filename) -> None:
+    def append_documentation_to_file(self, response, filename, message):
         file_exists = os.path.isfile(filename)
-
+        
+        # Create directories if they don't exist
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        
         # If file does not exist, write a file header
         header = ""
         if not file_exists:
             header = "=== Documentation Log ===\n\n"
+        
+        # Format the content with clear section headers and spacing
+        content = f"## Agent: {response.get('agent', "")}\n\n"
 
-        content = (
-            f"Agent: {response['agent']}\n\n"
-            "Documentation:\n"
-            f"{response['documentation'].strip()}\n"
-            + ("-" * 40)  # separator line
-            + "\n"
-        )
-
+        content = f"## Message: {message}\n\n"
+        
+        # Add task and status
+        content += f"**Task:** {response.get('task', "")}\n"
+        
+        # Add detailed description
+        content += f"### Details\n{response.get('details', "")}\n\n"
+        
+        if response.get('code'):
+            content += f"### Code\n```\n{response['code']}\n```\n\n"
+        
+        # Add challenges if present
+        if response.get('challenges'):
+            content += f"### Challenges\n{response['challenges']}\n\n"
+        
+        # Add separator
+        content += f"{'-' * 80}\n\n"
+        
+        # Write to file with proper encoding
         with open(filename, "a", encoding="utf-8") as f:
             if header:
                 f.write(header)
             f.write(content)
+        
+        return content

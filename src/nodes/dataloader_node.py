@@ -72,9 +72,9 @@ class Node(NodeBase):
             {context}
             
             1. Use the context below (column names) to decide what metadata and object_type is relevant.\n
-            2. Call load_file_index with the correct metadata.\n
-            3. If a required parameter is missing, ask the user for those parameters.
-            4. Call the tool a maximum of one time. If multiple simulations, objects, or timesteps, include all of them in a list.
+            2. Call load_file_index() with the correct metadata.\n
+            3. If a required parameter is missing, ask the user for those parameters. Otherwise, call the load_file_index() tool.
+            5. If multiple simulations, objects, or timesteps, include all of them in a list.
             """
         
         self.load_prompt_template = PromptTemplate(
@@ -199,22 +199,24 @@ class Node(NodeBase):
                     "user_input": user_input,
                 })
                 counter += 1
-                if not response.tool_calls:
-                    logger.warning(f"[DATALOADER] No tools called. Routing to human feedback for more info.")
-                    return {"messages": [response], "current_obj": current_obj, "next": "HumanFeedback", "current": "DataLoader"}
-                
                 if DISABLE_FEEDBACK:
-                    if response.tool_calls:
+                    if not response.tool_calls:
+                        user_input = "No, ignore the columns that you are missing and continue."
+                    else:
                         approved = True
-                    user_input = "Ignore the columns that you are missing and continue."
-                feedback, approved = human_feedback(f"{response.content}\n{response.tool_calls}\n")
+                        user_input = ""
+                else:
+                    if not response.tool_calls:
+                        logger.warning(f"[DATALOADER] No tools called. Routing to human feedback for more info.")
+                        return {"messages": [response], "current_obj": current_obj, "next": "HumanFeedback", "current": "DataLoader"}
+                    
+                    feedback, approved = human_feedback(f"{response.content}\n{response.tool_calls}\n")
+                    user_input = "\n".join([user_input, feedback.content])
 
                 if approved:
                     current_obj += 1
                     logger.debug(f"[DATALOADER] Tool called.")
                     return {"messages": [response], "current_obj": current_obj, "next": "DBWriter", "current": "DataLoader", "approved": False}
-                else:
-                    user_input = "\n".join([user_input, feedback.content])
             
         # If all required steps completed, signal success and move to Documentation
         if retrieved_docs and file_index and db_path:

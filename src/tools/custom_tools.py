@@ -94,7 +94,7 @@ def track_halo_evolution(halo_id: str, timestep: int, timestep_column_name: str,
 
     file = f"{WORKING_DIRECTORY}{session_id}/{session_id}_{df_index}.csv"
     compiled_df.to_csv(file, index=False)
-    results_list.append((file, f"Calculated all halos equivalent to halo ID = {halo_id} for all timesteps using nearest neighbor in adjacent timesteps."))
+    results_list.append((file, f"Calculated all halos equivalent to halo ID = {halo_id} for all timesteps using nearest neighbor in adjacent timesteps.", "Track evolution tool: The output is a dataframe where each row is a timestep tracking a target halo."))
     df_index +=1
 
     return Command(update={

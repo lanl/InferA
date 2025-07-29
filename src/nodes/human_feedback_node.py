@@ -20,7 +20,7 @@ class Node(NodeBase):
     
     def run(self, state):
         previous_node = state.get("current", None)
-        if previous_node in ["HumanFeedback"]:
+        if previous_node in ["HumanFeedback", "RoutingTool"]:
             previous_node = "Supervisor"
         approved = state.get("approved", None)
         

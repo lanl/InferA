@@ -30,16 +30,19 @@ class Node(NodeBase):
         results_list = state.get("results_list", [])
         df_index = state.get("df_index", 0)
 
+        print(results_list)
         # Aggregate all explanations for previous dfs
         output_descriptions= self._aggregate_results_description(results_list)
-        print(output_descriptions)
+
         try:
             response = self.call_load.invoke({
                 "task": task,
                 "output_descriptions": output_descriptions
             })
         except Exception as e:
-            return self._error_response(f"LLM failed to generate tool: {e}")
+            return self._error_response(f"LLM failed to generate tool.\nError:\n{e}")
+        
+        print(response)
         
         tool_calls = response.tool_calls
         data_paths = tool_calls[0]['args']['data_paths']
@@ -52,7 +55,6 @@ class Node(NodeBase):
             return self._error_response(error_msg)
         
         columns = list(df.columns)
-
         try:
             response = self.call_tool.invoke({
                 "task": task, 
@@ -62,41 +64,56 @@ class Node(NodeBase):
                 "df_types": df.dtypes.to_string()
             })
         except Exception as e:
-            return self._error_response(f"LLM failed to generate tool: {e}")
+            return self._error_response(f"LLM failed to generate tool.\nError:\n{e}")
         
-        tool_calls = response.tool_calls
+        tool_calls = response.tool_calls[0]
         if not tool_calls:
             logger.error(f"No tools called.")
-            return self._error_response(f"No tools called for visualization. Must return at least one tool.")
+            return self._error_response(f"No tools called. Must return at least one tool.")
         
         logger.debug(f"[PYTHON PROGRAMMER] Tools called: {tool_calls}")
+        
+        if tool_calls.get("name") != 'GenerateCode':
+            return {"messages": [response], "next": "PythonTool", "current": "PythonProgrammer"}
 
-        code_response = [t for t in tool_calls if t.get("name") == 'GenerateCode']
-        other_tools = [t for t in tool_calls if t.get("name") != 'GenerateCode']
+        # code_response = [t for t in tool_calls if t.get("name") == 'GenerateCode']
+        # other_tools = [t for t in tool_calls if t.get("name") != 'GenerateCode']
 
-        if other_tools:
-            return {"messages": other_tools, "next": "PythonTool", "current": "PythonProgrammer"}
-        if code_response:
-            code_response = code_response[0]
+        # if other_tools:
+        #     return {"messages": other_tools, "next": "PythonTool", "current": "PythonProgrammer"}
+        elif tool_calls.get("name") == 'GenerateCode':
+            code_response = tool_calls
 
             import_code = code_response['args']['imports']
             python_code = code_response['args']['python_code']
             explanation = code_response['args']['explanation']
             output_description = code_response['args']['output_description']
 
-            logger.info(f"\033[1;30;47m[PYTHON PROGRAMMER] Imports:\n\n{import_code}\n\nGenerated code:\n\n{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
+            logger.debug(f"\033[1;30;47m[PYTHON PROGRAMMER] Imports:\n\n{import_code}\n\nGenerated code:\n\n{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
             # Execute the code safely from fastAPI server
             try:
                 result = query_dataframe_agent(df, python_code, imports=import_code)
-                if isinstance(result, dict) and "error_type" in result and "error_message" in result:
-                    error_str = f"Execution returned error: {result['error_type']}: {result['error_message']}.\nCode: {python_code}"
-                    return self._error_response(error_str)
+                
+                # Handle different result types
+                if isinstance(result, pd.DataFrame):
+                    # Result is already a DataFrame, no conversion needed
+                    pass
+                elif isinstance(result, pd.Series):
+                    # Convert Series to DataFrame
+                    result = result.to_frame()
+                elif result is None:
+                    # Handle None result
+                    result = pd.DataFrame()  # Empty DataFrame or appropriate message
+                elif isinstance(result, str):
+                    # If result is a string, you might want to display it differently
+                    # or convert it to a DataFrame with a single cell
+                    result = pd.DataFrame({'result': [result]})
                 else:
-                    result = pd.DataFrame.from_dict(result)
-
+                    # For other types, convert to string and then to DataFrame
+                    result = pd.DataFrame({'result': [str(result)]})
+                
             except Exception as e:
-                logger.error(f"Execution error: {e}")
-                return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}.")
+                return self._error_response(f"Failed to execute code on server\n\nError:{e}\n\nCode: {import_code}\n{python_code}")
         
             return self._handle_result(result, import_code, python_code, explanation, output_description, df_index)
 
@@ -138,7 +155,7 @@ class Node(NodeBase):
             """
             You are a python coding assistant with expertise in working with the Pandas library.
             Your task is to load the correct files from the list of files provided based on the task.
-
+            
             < Task >
             {task}
 
@@ -162,20 +179,39 @@ class Node(NodeBase):
         system_prompt = (
             """
             You are a python coding assistant with expertise in working with the Pandas library.
-            Your task is to transform a pandas DataFrame named `input_df` based on user instructions. 
-            You are given tools to complete your task. Answer with maximum one tool call.
+            Your task is to transform a pandas DataFrame named `input_df` based on user instructions.
             
-            ***STRICT RULES (Always Follow These if using the GenerateCode tool):***
+            ***STRICT RULES FOR CODE GENERATION:***
             - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
-            - ✅ ALWAYS assign the final result to a single DataFrame named `result`. It must ALWAYS be a dataframe.
-            - ❌ NEVER use file I/O, or print statements.
-            - ✅ Each import should be on its own separate line.
-            - ✅ Use only pandas (replacing pandas), numpy, and scipy operations. If using any of the functions in these libraries, double check to make sure the namespace is correct.
-            - ✅ If the user’s task applies to only part of the DataFrame, return just the relevant rows or columns.
-            - ❌ Do not rename any columns in the dataframe. When possible, keep previous column names.
+            - ✅ ALWAYS begin with necessary imports, each on its own line:
+                import pandas as pd
+                import numpy as np (if needed)
+                from scipy import ... (if needed)
+            - ✅ ALWAYS work with the input DataFrame named `input_df` as your starting point
+            - ✅ ALWAYS assign the final result to a variable named `result` which MUST be a pandas DataFrame
+            - ✅ ALWAYS include comments explaining complex operations or logic
+            - ❌ NEVER use file I/O operations, print statements, or display functions
+            - ❌ NEVER rename columns unless explicitly requested by the user. Avoid column name conflicts when concatenating DataFrames
+            - ❌ NEVER return multiple code blocks or non-code explanations mixed with code
+            - ✅ If the task applies to only part of the DataFrame, return only the relevant rows or columns
+            - ✅ Handle potential errors (like division by zero, missing NaN values)
+            - ✅ For complex operations, use intermediate variables with descriptive names
+            - ❌ NEVER perform any type of visualization
 
             First, think step-by-step about how to perform the task using pandas, numpy and python code.
             Then, return only the final code inside a Python code block.
+
+            Example format of your response:
+            ```python
+            import pandas as pd
+            import numpy as np
+            
+            # Your transformation code here
+            # ...
+            
+            # Final result assignment
+            result = transformed_dataframe
+            ```
 
             < Task >
             {task}
@@ -188,7 +224,7 @@ class Node(NodeBase):
             {df_head}
             ```
 
-            < DataFrame Statistical Summary (`df.describe()`) >
+            < DataFrame Statistical Summary >
             ```
             {df_describe}
             ```
@@ -196,6 +232,9 @@ class Node(NodeBase):
             < DataFrame types >
             {df_types}
 
+            After generating code, double check to make sure the columns used exist in the dataframe.
+            You must respond with a tool.
+            Respond only with JSON.
             """
         )
     
@@ -218,6 +257,8 @@ class Node(NodeBase):
             working_results.append((return_file, explanation, output_description))
             pretty_output = pretty_print_df(result, return_output=True, max_rows=5)
 
+            pretty_output += f"\n\nColumns in dataframe:\n{list(result.columns)}\n\nDataFrame (first few rows):\n```{result.head(5)}```\n"
+
         elif isinstance(result, dict):
             working_results.append((f"python_{df_index}", result, output_description))
             pretty_output = pretty_print_dict(result, return_output=True, max_items=5)
@@ -225,7 +266,7 @@ class Node(NodeBase):
             pretty_output = str(result)
 
         df_index +=1
-        stashed_msg = f"Python code\n{python_code}\n\nOutput:\n{pretty_output}"
+        stashed_msg = f"Agent:\nPython Programmer\n\nPython code:\n{python_code}\n\nExplanation:\n{explanation}\n\nOutput:\n{pretty_output}"
 
         try:
             file_path = os.path.join(WORKING_DIRECTORY, self.session_id, f"{self.session_id}_{df_index}.py")
@@ -258,7 +299,7 @@ class Node(NodeBase):
         return {
             "next": "QA",
             "current": "PythonProgrammer",
-            "messages": [AIMessage(f"Code executed successfully.\n\n{pretty_output}")],
+            "messages": [AIMessage(f"Python Programmer executed code successfully.\n\n{pretty_output}\n\n{explanation}")],
             "stashed_msg": stashed_msg,
             "working_results": working_results,
             "df_index": df_index,

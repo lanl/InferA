@@ -145,7 +145,7 @@ class Node(NodeBase):
         Your task is to write SQL queries that extract essential data from the data based on your given task, filtering large datasets into smaller, relevant subsets for downstream analysis.
 
         < Domain Knowledge >
-        - The simulation data includes: simulations (different initial conditions), timesteps (hundreds per simulation), and files for various cosmology objects.
+        - The simulation data includes: simulations (different initial conditions as integers), timesteps (hundreds per simulation), and files for various cosmology objects.
         - Object files include: dark matter halos, halo particles, galaxies, and galaxy particles, with coordinate and physical properties.
         - Each object has its own set of 3D coordinates, physical properties, and unique identifier.
 

@@ -138,7 +138,7 @@ def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: A
     
     Args:
         sim_idx: List of simulation indexes. Index can be between 0-3.
-        timestep: List of timestep(s) of simulation to load from. If user asks for all timesteps, set timestep = [-1]
+        timestep: List of timestep(s) of simulation to load from. If user asks for all timesteps or is unclear which timestep, instead load all timesteps - set timestep = [-1].
         object: List of object types in simulation to load (maximum of 4 object types). Must be one of the following: [haloproperties, galaxyproperties, haloparticles, galaxyparticles]
 
     Returns:

@@ -79,7 +79,7 @@ class Node(NodeBase):
 
             1. Summarize the key results — trends, relationships, anomalies, or distributions.
             2. Use technical language suitable for scientific communication.
-            3. Be concise (3–6 sentences). Avoid repeating raw data or code.
+            3. Be as descriptive as possible.
             4. Ground all claims in the data provided. Do not speculate beyond the evidence.
 
             ---

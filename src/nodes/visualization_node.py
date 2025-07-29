@@ -50,35 +50,37 @@ class Node(NodeBase):
         except Exception as e:
             return self._error_response(f"LLM failed to generate code: {e}")
 
-        tool_calls = response.tool_calls
-        print(tool_calls)
+        tool_calls = response.tool_calls[0]
         if not tool_calls:
             logger.error(f"No tools called.")
-            return self._error_response(f"No tools called for visualization. Must return at least one tool.")
+            return self._error_response(f"No tools called. Must return at least one tool.")
     
         logger.debug(f"[VISUALIZATION] Tools called: {tool_calls}")
-
-
-        code_response = [t for t in tool_calls if t.get("name") == 'GenerateVisualization']
-        other_tools = [t for t in tool_calls if t.get("name") != 'GenerateVisualization']
         
-        if other_tools:
-            return {"messages": other_tools, "next": "VisualTool", "current": "Visualization"}
-        if code_response:
-            code_response = code_response[0]
+        if tool_calls.get("name") != "GenerateVisualization":
+            return {"messages": [response], "next": "VisualTool", "current": "Visualization"}
+        if tool_calls.get("name") == "GenerateVisualization":
+            code_response = tool_calls
             
             import_code = code_response['args']['imports']
             python_code = code_response['args']['python_code']
             explanation = code_response['args']['explanation']
             output_description = code_response['args']['output_description']
 
-            logger.info(f"\033[1;30;47m[VISUALIZATION] Imports:\n\n{import_code}\n\nGenerated code:\n\n{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
+            logger.debug(f"\033[1;30;47m[VISUALIZATION] Imports:\n\n{import_code}\n\nGenerated code:\n\n{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
             # Execute the code safely from fastAPI server
             try:
                 result = query_dataframe_agent(df, python_code, imports=import_code)
+                if isinstance(result, pd.DataFrame):
+                    pass
+                elif isinstance(result, str):
+                    logger.info(f"Result: {result}")
+                elif isinstance(result, None):
+                    logger.debug("Code completed.")
+                else:
+                    logger.debug(f"Result: {result}")
             except Exception as e:
-                logger.error(f"Execution error: {e}")
-                return self._error_response(f"Failed to execute code on server: {e}. Code: {python_code}.")
+                return self._error_response(f"Failed to execute code on server\n\nError:{e}\n\nCode: {import_code}\n{python_code}")
         
             return self._handle_result(result, import_code, python_code, explanation, output_description, df_index)
 
@@ -148,6 +150,7 @@ class Node(NodeBase):
             - Use plt.tight_layout() to prevent overlapping elements.
 
             < Code Structure and Comments >
+            - You will begin with the input_df already loaded. Do not load any files even if the task says so.
             - Begin with a brief comment explaining the visualization purpose.
             - Group related operations with clear, descriptive comments.
             - Use meaningful variable names that reflect their content.
@@ -158,6 +161,7 @@ class Node(NodeBase):
 
             Examples:
 
+            
             Example 1. 3D Point Cloud with Scalar Field:
             ```python
             # Visualize 3D point cloud with temperature data
@@ -168,10 +172,20 @@ class Node(NodeBase):
             pdata = pv.PolyData(points)
             pdata['Temperature'] = temp
 
+            # Create RGB colors for each point (default: blue)
+            colors = np.tile([0, 0, 255], (len(points), 1))  # blue in RGB
+
+            # Highlight the first point with red
+            colors[0] = [255, 0, 0]  # red in RGB
+
+            # Add the RGB color array to the point cloud
+            pdata['RGB'] = colors  # this will be saved in the VTK
+
             # Save to VTK file
             result = "data_storage/temperature_point_cloud.vtk"
             pdata.save(result)
 
+            
             Example 2. Time Series Line Plot
             # Create time series plot of temperature
             plt.figure(figsize=(10, 6))
@@ -187,9 +201,11 @@ class Node(NodeBase):
             plt.savefig(result)
             plt.close()
 
+            
             Example 3. 3D Time Series
             Call generate_pvd_file tool
 
+            
             < Task >
             {task}
 
@@ -233,12 +249,8 @@ class Node(NodeBase):
         """
         Process the result returned by executing the generated pandas code.
         """
-        working_results = []
-        if isinstance(result, dict) and "error_type" in result and "error_message" in result:
-            error_str = f"Execution returned error: {result['error_type']}: {result['error_message']}.\nCode: {python_code}"
-            return self._error_response(error_str)
-        
-        elif isinstance(result, pd.DataFrame):
+        working_results = []        
+        if isinstance(result, pd.DataFrame):
             if result.empty:
                 logger.info(f"[VISUALIZATION] No dataframe returned.")
             else:
@@ -256,7 +268,7 @@ class Node(NodeBase):
         else:
             pretty_output = str(result)
 
-        stashed_msg = f"Python code\n{python_code}\n\nOutput:\n{pretty_output}"
+        stashed_msg = f"Python code\n{python_code}\n\nOutput:\n{pretty_output}\n\nIf output is a file path, then the query was successful."
         try:
             file_path = os.path.join(WORKING_DIRECTORY, self.session_id, f"{self.session_id}_{df_index}.py")
 
@@ -287,7 +299,7 @@ class Node(NodeBase):
         return {
             "next": "QA",
             "current": "Visualization",
-            "messages": [AIMessage(f"Pandas code executed successfully.\n\n{pretty_output}")],
+            "messages": [AIMessage(f"SUCCESS. Visualization code executed successfully.\n\n{pretty_output}")],
             "stashed_msg": stashed_msg,
             "working_results": working_results,
             "df_index": df_index,

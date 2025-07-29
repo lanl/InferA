@@ -18,6 +18,7 @@ class State(TypedDict):
 
     # supervisor node
     task: str
+    base_task: str # store default task to the agent to regenerate if needed
     current_step: int
 
     # human feedback
