@@ -18,7 +18,7 @@ from langgraph.types import Command
 from langgraph.prebuilt import InjectedState
 
 from src.utils.dataframe_utils import pretty_print_df
-from config import WORKING_DIRECTORY
+from config import WORKING_DIRECTORY, SIMULATION_PATHS
 
 genericio_path = "genericio/legacy_python/"
 sys.path.append(genericio_path)
@@ -144,14 +144,13 @@ def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: A
     Returns:
         dict: Nested dictionary index of all relevant files
     """
-    root_paths = ["/vast/projects/exasky/data/hacc/SCIDAC_RUNS/128MPC_RUNS_FLAMINGO_DESIGN_3B", "/vast/projects/exasky/data/hacc/SCIDAC_RUNS/128MPC_RUNS_FLAMINGO_DESIGN_3A", "/vast/projects/libra/scidac_data/128MPC_RUNS_FLAMNGO_DESIGN_3A", "/vast/projects/libra/scidac_data/128MPC_RUNS_FLAMNGO_DESIGN_3B"]
-    for idx, path in enumerate(root_paths):
+    for idx, path in enumerate(SIMULATION_PATHS):
         logger.info(f"Simulation {idx}: {path}")
 
     with open("src/data/file_descriptions.json", "r") as file:
         valid_object_types = json.load(file).keys()
 
-    index = index_simulation_directories(root_paths, valid_object_types)
+    index = index_simulation_directories(SIMULATION_PATHS, valid_object_types)
     sim_ids = list(index.keys())
 
     if isinstance(sim_idx, int):

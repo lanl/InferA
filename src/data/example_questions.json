@@ -2,7 +2,7 @@
   "questions": [
     {
       "id": 1,
-      "text": "How does the slope and normalization of the gas-mass fraction–mass relation (M_gas,500c/M_500c vs. M_500c) evolve from the earliest timestep to the latest timestep in a fiducial physics model? At which mass scales is the biggest change over time observed, and does the relation steepen or flatten over time?",
+      "text": "How does the slope and normalization of the gas-mass fraction–mass relation (sod_halo_MGas500c/sod_halo_M500c) evolve from the earliest timestep to the latest timestep in simulation 0?",
       "original": "How does the slope and normalization of the gas-mass fraction–mass relation (M_gas,500c/M_500c vs. M_500c) evolve from z = 2 to z = 0 in a fiducial physics model? At which mass scales is the strongest redshift-driven evolution observed, and does the relation steepen or flatten over time?",
       "analysis_difficulty": "Hard",
       "expertise_difficulty": "Medium",
@@ -10,14 +10,14 @@
     },
     {
       "id": 2,
-      "text": "Within a single feedback model, how does the intrinsic scatter of the concentration–mass relation for all haloes evolve from z = 2 down to z = 0? At which redshift does the scatter peak, and does that coincide with known epochs of rapid mass accretion or merger activity?",
+      "text": "Within a single simulation, how does the intrinsic scatter of the concentration–mass relation for all haloes evolve from z = 2 down to z = 0? At which redshift does the scatter peak, and does that coincide with known epochs of rapid mass accretion or merger activity?",
       "analysis_difficulty": "Hard",
       "expertise_difficulty": "Hard",
       "scale": "multi-timestep, single-simulation"
     },
     {
       "id": 3,
-      "text": "What is the timestep evolution of the core-excluded X-ray luminosity–mass scaling, L_500cBoloEx–M_500c, starting from a middle timestep to the latest timestep in a single subgrid model?",
+      "text": "What is the timestep evolution of the core-excluded X-ray luminosity–mass scaling, given by sod_halo_L500cBoloEx / M_500c, starting from the first timestep to the last timestep in simulation 0?",
       "original": "What is the redshift evolution of the core-excluded X-ray luminosity–mass scaling, L_500cBoloEx–M_500c, between z = 1 and z = 0 in a single subgrid model?",
       "analysis_difficulty": "Medium",
       "expertise_difficulty": "Medium",
@@ -25,7 +25,7 @@
     },
     {
       "id": 4,
-      "text": "In a fiducial simulation, how does the ratio of gas to dark-matter velocity dispersions for cluster-scale haloes evolve from the earliest timestep to the latest timestep? Does the velocity bias grow, shrink, or remain constant over this interval, and what might that imply about turbulent support in the intracluster medium?",
+      "text": "In simulation 0, how does the ratio of gas to dark-matter velocity dispersions for cluster-scale haloes evolve from the earliest timestep to the latest timestep? Does the velocity bias grow, shrink, or remain constant over this interval, and what might that imply about turbulent support in the intracluster medium?",
       "original": "In a fiducial simulation, how does the ratio of gas to dark-matter velocity dispersions for cluster-scale haloes evolve from z = 1 to z = 0? Does the velocity bias grow, shrink, or remain constant over this interval, and what might that imply about turbulent support in the intracluster medium?",
       "analysis_difficulty": "Hard",
       "expertise_difficulty": "Hard",
@@ -41,7 +41,7 @@
     },
     {
       "id": 6,
-      "text": "For haloes above 10^12 M_⊙ at the latest timestep, how does the correlation between instantaneous star formation rate (sod_halo_sfr) and star-forming gas mass (sod_halo_mass_sfgas) change as the black-hole seed mass (M_seed) is varied? Do larger M_seed values lead to more scatter or a systematic offset in the SFR–gas mass relation?",
+      "text": "For haloes above 10^12 MStar at timestep = 624, how does the correlation between star formation rate (sod_halo_sfr) and star-forming gas mass (sod_halo_mass_sfgas) change across all simulations? Which simulation leads to more scatter or a systematic offset in the SFR–gas mass relation?",
       "original": "For haloes above 10^12 M_⊙ at z=0, how does the correlation between instantaneous star formation rate (sod_halo_sfr) and star-forming gas mass (sod_halo_mass_sfgas) change as the black-hole seed mass (M_seed) is varied? Do larger M_seed values lead to more scatter or a systematic offset in the SFR–gas mass relation?",
       "analysis_difficulty": "Hard",
       "expertise_difficulty": "Hard",
@@ -151,7 +151,7 @@
     },
     {
       "id": 21,
-      "text": "Simulation 0 was run with the following parameters: FSN = 0.5387, VEL = 149.279, TEXP = 9.613, BETA = 0.8710, SEED = 9.548e5. Simulation 2 was run with the following parameters: FSN = 0.4484, VEL = 174.181, TEXP = 9.952, BETA = 0.7258, SEED = 3.129e5. Based on the size count of the 10 largest halos and galaxies in timestep 498, can you recommend an FSN and VEL parameter that would increase the sizes of the largest halos?",
+      "text": "Simulation 0 was run with the following parameters: FSN = 0.5387, VEL = 149.279, TEXP = 9.613, BETA = 0.8710, SEED = 9.548e5. Simulation 2 was run with the following parameters: FSN = 0.4484, VEL = 174.181, TEXP = 9.952, BETA = 0.7258, SEED = 3.129e5. Based on the size count of the 10 largest halos and galaxies in timestep 498, can you recommend an FSN and VEL parameter that would increase the sizes of the largest halos? Note that FSN and VEL are not included in any of the columns.",
       "analysis_difficulty": "Medium",
       "expertise_difficulty": "Medium",
       "scale": "single-timestep, multi-simulation"

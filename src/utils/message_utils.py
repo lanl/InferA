@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 def pretty_print_message(message, indent=False):
     pretty_message = message.pretty_repr(html=True)
     if not indent:
-        print(pretty_message)
+        logger.info(pretty_message)
         return
 
     indented = "\n".join("\t" + c for c in pretty_message.split("\n"))

@@ -3,15 +3,17 @@ import requests
 import pandas as pd
 import tempfile
 import logging
+from typing import List
+
 
 logger = logging.getLogger(__name__)
 
-def query_dataframe_agent(df: pd.DataFrame, pandas_code: str, imports: str, api_url: str = "http://127.0.0.1:3000") -> str:
+def query_dataframe_agent(dfs: List[pd.DataFrame], pandas_code: str, imports: str, api_url: str = "http://127.0.0.1:3000") -> str:
     """
     Send a DataFrame, pandas code, and imports to the FastAPI agent server and return the response.
 
     Args:
-        df (pd.DataFrame): The DataFrame to send.
+        dfs (List[pd.DataFrame]): List of DataFrames to send.
         pandas_code (str): The pandas code to be executed on the server.
         imports (str): The import statements, each on a separate line.
         api_url (str): Base URL of the FastAPI server.
@@ -20,16 +22,23 @@ def query_dataframe_agent(df: pd.DataFrame, pandas_code: str, imports: str, api_
         str: The response from the agent.
     """
     try:
-        # Save the DataFrame to a temporary CSV file
-        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
-            temp_file_path = tmp.name
-            df.to_csv(temp_file_path, index=False)
+        files = {}
+        temp_files = []
 
-            with open(temp_file_path, 'rb') as file:
-                files = {'file': file}
-                data = {'pandas_code': pandas_code, 'imports': imports}
-                logger.debug(f"[SANDBOX CLIENT] Preparing to send POST request. Data: {data}, df tempfile: {files}.")
-                query_res = requests.post(f"{api_url}/query/", files=files, data=data)
+        for i, df in enumerate(dfs):
+            # Save the DataFrame to a temporary CSV file
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
+                temp_file_path = tmp.name
+                df.to_csv(temp_file_path, index=False)
+                temp_files.append(temp_file_path)
+
+                file_param_name = f'file{i+1}'
+                files[file_param_name] = open(temp_file_path, 'rb')
+
+        data = {'pandas_code': pandas_code, 'imports': imports}
+        logger.debug(f"[SANDBOX CLIENT] Preparing to send POST request. Data: {data}, df tempfile: {files}.")
+        
+        query_res = requests.post(f"{api_url}/query/", files=files, data=data)
 
         # Delete the temporary file
         try:

@@ -1,0 +1,51 @@
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file - for API keys
+load_dotenv()
+
+# llm_client.py - model configs
+
+# Maximum token limit for the language model
+# Recommend at least 80,000. Average run without quality review iterations uses ~40k tokens.
+# With iterations will use more.
+MAX_TOKEN_LIMIT = 200000
+
+# Number of previous messages to include in the context for agents that benefit from message history
+# (e.g., supervisor, QA). Increasing this will use more tokens.
+MESSAGE_HISTORY = 10
+
+
+# Configuration for LanlAI portal API
+ENABLE_LANLAI = False # If true, switches model to use LanlAI API
+LANLAI_API_TOKEN = os.getenv("lanlAI_token")
+LANLAI_API_URL = os.getenv("lanlAI_api_url")
+LANLAI_MODEL_NAME = "Your preferred model"
+PATH_TO_LANLCHAIN_PEM = "lanlchain.pem" # Path to the PEM file for LanlAI - contact LanlAI team for help with .pem file
+
+# Configuration for OpenAI API
+ENABLE_OPENAI = True
+OPENAI_API_KEY = os.getenv("openai_key")
+OPENAI_MODEL_NAME = "gpt-4o" # Or any model you choose
+OPENAI_EMBED_MODEL_NAME = "text-embedding-3-small" # Or any embedding model you choose
+
+# Configuration for local Ollama setup
+OLLAMA_API_URL = "Your Ollama API URL"
+OLLAMA_MODEL_NAME = "mistral-small3.1:latest"  # Or any model you've pulled
+
+# Configuration for local embedding model
+OLLAMA_EMBED_MODEL_NAME = "nomic-embed-text:latest" # Or any embedding model you choose
+
+# File paths and directories
+WORKING_DIRECTORY = "./data_storage/" # Directory to intermediate save files
+STATE_DICT_PATH = "./state/state.pkl" # Path to save state dictionary
+
+# logger_config.py setup
+PRINT_DEBUG_TO_CONSOLE = False # If True, debug messages will be printed to console
+
+# graph_builder.py configs
+# Shortcut to skip user query and directly test later nodes
+DISABLE_FEEDBACK = False # If True, disables user feedback and auto-approves/ignores certain steps - used for testing
+DISABLE_DOCUMENTATION = False # If true, skips documentation agent.
+
+SIMULATION_PATHS = ["PATH TO FLAMINGO DESIGN FOLDER1", "PATH TO FLAMINGO DESIGN FOLDER2", "PATH TO FLAMINGO DESIGN FOLDER3", "PATH TO FLAMINGO DESIGN FOLDER4"]

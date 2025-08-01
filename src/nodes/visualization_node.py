@@ -70,7 +70,7 @@ class Node(NodeBase):
             logger.debug(f"\033[1;30;47m[VISUALIZATION] Imports:\n\n{import_code}\n\nGenerated code:\n\n{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
             # Execute the code safely from fastAPI server
             try:
-                result = query_dataframe_agent(df, python_code, imports=import_code)
+                result = query_dataframe_agent([df], python_code, imports=import_code)
                 if isinstance(result, pd.DataFrame):
                     pass
                 elif isinstance(result, str):
@@ -118,7 +118,7 @@ class Node(NodeBase):
         system_prompt = (
             """
             You are a Python coding assistant specializing in scientific visualization using PyVista, VTK, and MatPlotLib.
-            Your task is to generate code based on a given pandas.DataFrame named `input_df`.
+            Your task is to generate code based on a given pandas.DataFrame named `input_df1`.
             
             < Data Visualization Rules >
             - Use PyVista/VTK for 3D data or when explicitly instructed to plot points/geometries
@@ -150,7 +150,7 @@ class Node(NodeBase):
             - Use plt.tight_layout() to prevent overlapping elements.
 
             < Code Structure and Comments >
-            - You will begin with the input_df already loaded. Do not load any files even if the task says so.
+            - You will begin with 'input_df1' already loaded. Do not load any files even if the task says so.
             - Begin with a brief comment explaining the visualization purpose.
             - Group related operations with clear, descriptive comments.
             - Use meaningful variable names that reflect their content.
@@ -165,8 +165,8 @@ class Node(NodeBase):
             Example 1. 3D Point Cloud with Scalar Field:
             ```python
             # Visualize 3D point cloud with temperature data
-            points = input_df[['x', 'y', 'z']].to_numpy()
-            temp = input_df['temperature'].to_numpy()
+            points = input_df1[['x', 'y', 'z']].to_numpy()
+            temp = input_df1['temperature'].to_numpy()
 
             # Create PolyData and add temperature as scalar field
             pdata = pv.PolyData(points)
@@ -189,7 +189,7 @@ class Node(NodeBase):
             Example 2. Time Series Line Plot
             # Create time series plot of temperature
             plt.figure(figsize=(10, 6))
-            plt.plot(input_df['timestamp'], input_df['temperature'], label='Temperature')
+            plt.plot(input_df1['timestamp'], input_df1['temperature'], label='Temperature')
             plt.xlabel('Time')
             plt.ylabel('Temperature (°C)')
             plt.title('Temperature Over Time')
@@ -212,7 +212,7 @@ class Node(NodeBase):
             < Output from previous step >
             {output_description}
 
-            < Columns in input_df >
+            < Columns in input_df1 >
             {columns}
 
             < DataFrame (first few rows) >

@@ -27,14 +27,32 @@ def read_root():
     return {"status": "Server is running"}
 
 @app.post("/query/")
-async def query_agent(request: Request, pandas_code: str = Form(...), imports: str = Form(...), file: UploadFile = File(...)):
+async def query_agent(request: Request, pandas_code: str = Form(...), imports: str = Form(...), 
+                    file1: UploadFile = File(...), file2: UploadFile = None, file3: UploadFile = None,
+                    file4: UploadFile = None, file5: UploadFile = None):
     logger.debug(f"[SANDBOX SERVER] Received pandas_code.")
+
+    dfs = []
+
     try:
-        df = pd.read_csv(file.file)
+        df = pd.read_csv(file1.file)
+        dfs.append(df)
     except Exception as e:
         logger.error(f"[SANDBOX SERVER] Error reading CSV file: {str(e)}")
         return {"error": f"File reading error: {str(e)}"}
 
+    # Process optional additional files
+    optional_files = [file2, file3, file4, file5]
+    for i, file in enumerate(optional_files, start=2):
+        if file is not None:
+            try:
+                df = pd.read_csv(file.file)
+                dfs.append(df)
+                logger.debug(f"[SANDBOX SERVER] Successfully loaded file{i}")
+            except Exception as e:
+                logger.error(f"[SANDBOX SERVER] Error reading CSV file{i}: {str(e)}")
+                return {"error": f"File{i} reading error: {str(e)}"}
+            
     # Define the execution environment
     # Remove unsafe builtins
     safe_builtins = dict(builtins.__dict__)
@@ -57,8 +75,12 @@ async def query_agent(request: Request, pandas_code: str = Form(...), imports: s
     }
 
     local_vars = {
-        'input_df': df.copy()
+        'input_df1': dfs[0].copy()
     }
+    
+    # Add additional dataframes if they exist
+    for i, df in enumerate(dfs[1:], start=2):
+        local_vars[f'input_df{i}'] = df.copy()
 
     # Main try-except block
     try:

@@ -49,19 +49,30 @@ class Node(NodeBase):
         logger.info(f"[PYTHON PROGRAMMER] To best answer the task, using data from {data_paths}")
 
         # Load dataframes for processing
-        df = self._load_dataframe(data_paths)
-        if df is None:
+        dfs = self._load_dataframe(data_paths)
+        if dfs is None:
             error_msg = "[PYTHON PROGRAMMER] Failed to load any dataframe for processing."
             return self._error_response(error_msg)
         
-        columns = list(df.columns)
+        # Create a comprehensive description of all dataframes
+        all_dfs_info = []
+        for i, df in enumerate(dfs):
+            df_info = f"DataFrame {i+1}:\n"
+            df_info += f"Columns: {list(df.columns)}\n"
+            df_info += f"Head:\n{df.head().to_string()}\n"
+            df_info += f"Description:\n{df.describe().to_string()}\n"
+            df_info += f"Data Types:\n{df.dtypes.to_string()}\n"
+            df_info += "-" * 50 + "\n"  # Separator between dataframes
+            all_dfs_info.append(df_info)
+
+        # Join all dataframe descriptions into a single string
+        all_dfs_description = "\n".join(all_dfs_info)
+
         try:
             response = self.call_tool.invoke({
                 "task": task, 
-                "columns": columns,
-                "df_head": df.head().to_string(),
-                "df_describe": df.describe().to_string(),
-                "df_types": df.dtypes.to_string()
+                "dataframes_info": all_dfs_description,
+                "num_dataframes": len(dfs)
             })
         except Exception as e:
             return self._error_response(f"LLM failed to generate tool.\nError:\n{e}")
@@ -92,7 +103,7 @@ class Node(NodeBase):
             logger.debug(f"\033[1;30;47m[PYTHON PROGRAMMER] Imports:\n\n{import_code}\n\nGenerated code:\n\n{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
             # Execute the code safely from fastAPI server
             try:
-                result = query_dataframe_agent(df, python_code, imports=import_code)
+                result = query_dataframe_agent(dfs, python_code, imports=import_code)
                 
                 # Handle different result types
                 if isinstance(result, pd.DataFrame):
@@ -130,9 +141,9 @@ class Node(NodeBase):
             if not dfs:
                 logger.error(f"No CSV files found in results_list: {data_path}.")
                 return None
-            combined_df = pd.concat(dfs)
+            # combined_df = pd.concat(dfs)
             logger.debug(f"[PYTHON PROGRAMMER] Loaded and concatenated CSV dataframes.")
-            return combined_df
+            return dfs
 
         except Exception as e:
             logger.error(f"[PYTHON PROGRAMMER] Failed to load CSV from {data_path}: {str(e)}")
@@ -179,7 +190,7 @@ class Node(NodeBase):
         system_prompt = (
             """
             You are a python coding assistant with expertise in working with the Pandas library.
-            Your task is to transform a pandas DataFrame named `input_df` based on user instructions.
+            Your task is to transform pandas DataFrames based on user instructions.
             
             ***STRICT RULES FOR CODE GENERATION:***
             - ✅ ALWAYS return a single Python code block using triple backticks: ```python ...code... ```
@@ -187,8 +198,10 @@ class Node(NodeBase):
                 import pandas as pd
                 import numpy as np (if needed)
                 from scipy import ... (if needed)
-            - ✅ ALWAYS work with the input DataFrame named `input_df` as your starting point
-            - ✅ ALWAYS assign the final result to a variable named `result` which MUST be a pandas DataFrame
+            - ✅ ALWAYS work with the input DataFrames provided:
+                - The first DataFrame is named 'input_df1'
+                - Additional DataFrames are named 'input_df2', 'input_df3', etc.
+            - ✅ ALWAYS assign the final result to a variable named `result` which MUST be a single pandas DataFrame
             - ✅ ALWAYS include comments explaining complex operations or logic
             - ❌ NEVER use file I/O operations, print statements, or display functions
             - ❌ NEVER rename columns unless explicitly requested by the user. Avoid column name conflicts when concatenating DataFrames
@@ -207,7 +220,8 @@ class Node(NodeBase):
             import numpy as np
             
             # Your transformation code here
-            # ...
+            df = input_df1...
+            df = input_df2...
             
             # Final result assignment
             result = transformed_dataframe
@@ -216,21 +230,11 @@ class Node(NodeBase):
             < Task >
             {task}
 
-            < Columns in dataframe >
-            {columns}
+            < Available DataFrames >
+            {dataframes_info}
 
-            < DataFrame (first few rows) >
-            ```
-            {df_head}
-            ```
-
-            < DataFrame Statistical Summary >
-            ```
-            {df_describe}
-            ```
-
-            < DataFrame types >
-            {df_types}
+            < Number of DataFrames available >
+            {num_dataframes}
 
             After generating code, double check to make sure the columns used exist in the dataframe.
             You must respond with a tool.
@@ -240,7 +244,7 @@ class Node(NodeBase):
     
         prompt_template = PromptTemplate(
             template=system_prompt,
-            input_variables=["task", "columns", "df_head", "df_describe", "df_types"],
+            input_variables=["task", "dataframes_info", "num_dataframes"],
         )
         return prompt_template | self.llm
     

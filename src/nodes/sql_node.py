@@ -47,7 +47,7 @@ class Node(NodeBase):
         try:
             table_descriptions = ""
             for i, table_name in enumerate(db_tables):
-                table_descriptions += f"Table: {table_name}\nColumns in {table_name}: {', '.join(db_columns[i])}\n\n"
+                table_descriptions += f"Table: {table_name}\nColumns in {table_name}: {', '.join(db_columns[i])}\n\n Object_type = {table_name}\n\n"
 
             logger.info(f"[SQL PROGRAMMER] SQL Query inputs:\n\nTASK: {task}\n\n{table_descriptions}\n\n")
             
@@ -57,59 +57,100 @@ class Node(NodeBase):
             output_description = response['output_description']
             logger.info(f"[SQL PROGRAMMER] Generated SQL: \n\n\033[1;30;47m{sql_query}\n\n{explanation}\033[0m\n\n")
 
-            # Execute SQL query
             db = duckdb.connect(db_path)
-            sql_response = db.sql(sql_query).df()
+
+            all_results = []
+            all_dfs = []
+            all_csv_outputs = []
+
+            # Split the SQL query into multiple queries if needed
+            sql_queries = sql_query.split(';')
+            sql_queries = [q.strip() for q in sql_queries if q.strip()]  # Remove empty queries
+
+            for i, query in enumerate(sql_queries):
+                if not query:
+                    continue
+                
+                try:   
+                    # Execute SQL query
+                    sql_response = db.sql(query).df()
+            
+                    if sql_response.empty:
+                        warning_msg = "SQL executed successfully but returned no rows. The query may be too restrictive or mismatched."
+                        logger.warning(warning_msg)
+                        diagnostic_msg = f"Columns: {db_columns}\n\n{warning_msg}\n\nSQL: {sql_query}"
+                    else:
+                        pp_df = pretty_print_df(sql_response, return_output = True, max_rows = 5)
+                        all_results.append(f"Query {i+1} Results:\n{pp_df}")
+                        all_dfs.append(sql_response)
+                        
+                        # Save CSV for this query
+                        csv_output = f"{WORKING_DIRECTORY}{session_id}/{session_id}_{df_index}_query{i+1}.csv"
+                        logger.info(f"\033[44m[SQL PROGRAMMER] Writing dataframe result for query {i+1} to {csv_output}.\033[0m")
+                        sql_response.to_csv(csv_output, index= False)
+                        all_csv_outputs.append(csv_output)
+                except Exception as e:
+                    error_msg = f"Error executing query {i+1}: {str(e)}\nQuery: {query}"
+                    logger.error(error_msg)
+                    return {
+                        "next": "QA",
+                        "current": "SQLProgrammer",
+                        "messages": [AIMessage(error_msg)],
+                        "stashed_msg": error_msg
+                    }
+
             db.close()
 
-            if sql_response.empty:
-                warning_msg = "SQL executed successfully but returned no rows. The query may be too restrictive or mismatched."
-                logger.warning(warning_msg)
-                diagnostic_msg = f"Columns: {db_columns}\n\n{warning_msg}\n\nSQL: {sql_query}"
-            else:
-                pp_df = pretty_print_df(sql_response, return_output = True, max_rows = 5)
-                
-                csv_output = f"{WORKING_DIRECTORY}{session_id}/{session_id}_{df_index}.csv"
-                logger.info(f"\033[44m[SQL PROGRAMMER] Writing dataframe result to {csv_output}.\033[0m")
-                sql_response.to_csv(csv_output, index= False)
+            df_index += 1
+            # results_list.append((csv_output, explanation, f"SQL Programmer: {output_description}"))
+            
+            try:
+                file_path = os.path.join(WORKING_DIRECTORY, session_id, f"{session_id}_{df_index}.sql")
+
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                logger.debug(f"[VISUALIZATION] Ensured directory exists: {os.path.dirname(file_path)}")
+
+                with open(file_path, 'w') as file:
+                    # Write the explanations
+                    file.write("-- Explanations\n")
+                    file.write("--" + str(explanation))
+                    file.write("\n\n")
+
+                    # Write the SQL query
+                    file.write("-- SQL Query\n")
+                    file.write(sql_query)
+                    file.write("\n")
 
                 df_index += 1
-                results_list.append((csv_output, explanation, f"SQL Programmer: {output_description}"))
-                try:
-                    file_path = os.path.join(WORKING_DIRECTORY, session_id, f"{session_id}_{df_index}.sql")
+            except Exception as e:
+                logger.error(f"[SQL PROGRAMMER] Failed to write SQL query to file. Error: {e}")
 
-                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                    logger.debug(f"[VISUALIZATION] Ensured directory exists: {os.path.dirname(file_path)}")
+            # Combine results for display
+            combined_results = "\n\n".join(all_results)
 
-                    with open(file_path, 'w') as file:
-                        # Write the explanations
-                        file.write("-- Explanations\n")
-                        file.write("--" + str(explanation))
-                        file.write("\n\n")
-
-                        # Write the SQL query
-                        file.write("-- SQL Query\n")
-                        file.write(sql_query)
-                        file.write("\n")
-
-                    df_index += 1
-                except Exception as e:
-                    logger.error(f"[SQL PROGRAMMER] Failed to write SQL query to file. Error: {e}")
+            if not all_dfs:
+                diagnostic_msg = f"Columns: {db_columns}\n\nNo queries returned data.\n\nSQL: {sql_query}"
                 return {
                     "next": "QA",
                     "current": "SQLProgrammer",
-                    "messages": [AIMessage(f"{pp_df}\n\nSQL query generated.\n{explanation}")],
-                    "stashed_msg": f"{pp_df}\n\nColumns: {db_columns}\n\nSQL query:\n{sql_query}\nExplanation:\n{explanation}",
+                    "messages": [AIMessage(diagnostic_msg)],
+                    "stashed_msg": diagnostic_msg
+                }
+
+            else:
+                # Add all CSVs to results list
+                for i, csv_path in enumerate(all_csv_outputs):
+                    # Here's the corrected part - adding tuples to results_list
+                    results_list.append((csv_path, explanation, f"SQL Programmer (Query {i+1}): {output_description}"))
+                                
+                return {
+                    "next": "QA",
+                    "current": "SQLProgrammer",
+                    "messages": [AIMessage(f"{combined_results}\n\nSQL queries generated.\n{explanation}")],
+                    "stashed_msg": f"{combined_results}\n\nColumns: {db_columns}\n\nSQL queries:\n{sql_query}\nExplanation:\n{explanation}",
                     "results_list": results_list,
                     "df_index": df_index
                 }
-            # If warning case, still send to QA with diagnostics
-            return {
-                "next": "QA",
-                "current": "SQLProgrammer",
-                "messages": [AIMessage(diagnostic_msg)],
-                "stashed_msg": diagnostic_msg
-            }
 
         except Exception as e:
             error_msg = f"Columns: {db_columns}\n\n[SQL ERROR] {str(e)}"
