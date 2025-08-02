@@ -97,8 +97,11 @@ class Node(NodeBase):
 
             import_code = code_response['args']['imports']
             python_code = code_response['args']['python_code']
+            result_output_code = code_response['args']['result_output_code']
             explanation = code_response['args']['explanation']
             output_description = code_response['args']['output_description']
+
+            python_code = python_code + "\n" + result_output_code
 
             logger.debug(f"\033[1;30;47m[PYTHON PROGRAMMER] Imports:\n\n{import_code}\n\nGenerated code:\n\n{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
             # Execute the code safely from fastAPI server

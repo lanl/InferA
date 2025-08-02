@@ -20,7 +20,7 @@
       "text": "What is the timestep evolution of the core-excluded X-ray luminosity–mass scaling, given by sod_halo_L500cBoloEx / M_500c, starting from the first timestep to the last timestep in simulation 0?",
       "original": "What is the redshift evolution of the core-excluded X-ray luminosity–mass scaling, L_500cBoloEx–M_500c, between z = 1 and z = 0 in a single subgrid model?",
       "analysis_difficulty": "Medium",
-      "expertise_difficulty": "Medium",
+      "expertise_difficulty": "Easy",
       "scale": "multi-timestep, single-simulation"
     },
     {
@@ -104,28 +104,28 @@
       "id": 14,
       "text": "For simulation 0 and simulation 1, can you track the halo closest to coordinate (123, 117, 105) in timestep = 54 across all timesteps. Afterwards, visualize the halo at each timestep and show interesting characteristics for how evolution of mass differed between the equivalent halo from different simulations?",
       "analysis_difficulty": "Medium",
-      "expertise_difficulty": "Easy",
+      "expertise_difficulty": "Medium",
       "scale": "multi-timestep, multi-simulation"
     },
     {
       "id": 15,
       "text": "Find me the 10 friends-of-friends halos and 10 galaxies closest in coordinates to the halo with fof_halo_tag = '251375070' in timestep 498 of simulation 0.",
       "analysis_difficulty": "Medium",
-      "expertise_difficulty": "Easy",
+      "expertise_difficulty": "Medium",
       "scale": "single-timestep, single-simulation"
     },
     {
       "id": 16,
       "text": "In timestep 498 in simulation 0, can you show me how well-aligned in coordinate the 100 largest galaxies are to the 10 largest halos? In addition, for each halo and galaxy that is aligned, provide the ratio of their mass, galaxy mass/halo mass",
       "analysis_difficulty": "Hard",
-      "expertise_difficulty": "Easy",
+      "expertise_difficulty": "Medium",
       "scale": "single-timestep, single-simulation"
     },
     {
       "id": 17,
-      "text": "A leading theory in cosmology is that galaxies form in dark matter halos. It would be interesting to know the characteristics of galaxies that form in the largest halos. What are the top 100 largest galaxies in the largest halo in timestep 498 of simulation 0? What are some unique characteristics of these galaxies? For example, do they generally have more spin, higher velocity, or higher kinetic energy than galaxies in other halos?",
+      "text": "A leading theory in cosmology is that galaxies form in dark matter halos. It would be interesting to know the characteristics of galaxies that form in the largest halos. First find the two largest halos by their halo count in timestep 624 of simulation 0. Then find the top 10 galaxies associated to those two halos related by fof_halo_tag. What are the differences in characteristics of the 2 groups of galaxies? For example, what are differences in their gas-mass, mass, or kinetic energy?",
       "analysis_difficulty": "Hard",
-      "expertise_difficulty": "Medium",
+      "expertise_difficulty": "Hard",
       "scale": "single-timestep, single-simulation"
     },
     {
@@ -151,7 +151,7 @@
     },
     {
       "id": 21,
-      "text": "Simulation 0 was run with the following parameters: FSN = 0.5387, VEL = 149.279, TEXP = 9.613, BETA = 0.8710, SEED = 9.548e5. Simulation 2 was run with the following parameters: FSN = 0.4484, VEL = 174.181, TEXP = 9.952, BETA = 0.7258, SEED = 3.129e5. Based on the size count of the 10 largest halos and galaxies in timestep 498, can you recommend an FSN and VEL parameter that would increase the sizes of the largest halos? Note that FSN and VEL are not included in any of the columns.",
+      "text": "Simulation 0 was run with the following parameters: FSN = 0.5387, VEL = 149.279, TEXP = 9.613, BETA = 0.8710, SEED = 9.548e5. Simulation 2 was run with the following parameters: FSN = 0.4484, VEL = 174.181, TEXP = 9.952, BETA = 0.7258, SEED = 3.129e5. Can you make an inference on the direction of the FSN and VEL paramaters in order to increase the fof_halo_count of the 100 largest halos in timestep 624? Also plot a summary of the differences in halo characteristics between the two simulations.",
       "analysis_difficulty": "Medium",
       "expertise_difficulty": "Medium",
       "scale": "single-timestep, multi-simulation"

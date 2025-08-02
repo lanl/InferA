@@ -87,7 +87,7 @@ class MultiAgentSystem:
         
     def run(self, user_input: str) -> None:
         state_key = self.state_key
-        config = {"configurable": {"thread_id": state_key}, "recursion_limit": 75}
+        config = {"configurable": {"thread_id": state_key}, "recursion_limit": 100}
 
         if state_key not in self.state_dict:
             self.state_dict[state_key] = {
@@ -161,51 +161,51 @@ class MultiAgentSystem:
 
 
 def main():
-    # base_session = 24312 # Starting session number
-    # step = "0"
-    # question_id = 24
+    base_session = 17570 # Starting session number
+    step = "0"
+    question_id = 17
     
-    # # Load the questions
-    # with open("src/data/example_questions.json", "r", encoding='utf-8') as f:
-    #     data = json.load(f)
-    
-    # # Find the question with the specified ID
-    # user_input = ""
-    # for question in data.get("questions", []):
-    #     if question.get("id") == question_id:
-    #         user_input = question.get("text")
-    #         break
-    
-    # if not user_input:
-    #     print(f"Question with ID {question_id} not found!")
-    #     return
-    
-    # # Run the system 10 times with incrementing session numbers
-    # for i in range(2):
-    #     session = str(base_session + i)
-    #     print(f"Running iteration {i+1}/10 with session {session}")
-        
-    #     # Create and run the system
-    #     system = MultiAgentSystem(session=session, step=step)
-    #     system.run(user_input)
-        
-    #     print(f"Completed iteration {i+1}/10")
-
-    session = "11000" # This can be anything - numbers are useful for keep tracking of what queries were ran
-    step = "0" # If -1, will skip saving states.
-    system = MultiAgentSystem(session = session, step = step)
-
-    question_id = 11
-
+    # Load the questions
     with open("src/data/example_questions.json", "r", encoding='utf-8') as f:
-        data = json.load(f)    
+        data = json.load(f)
     
+    # Find the question with the specified ID
     user_input = ""
     for question in data.get("questions", []):
         if question.get("id") == question_id:
             user_input = question.get("text")
+            break
+    
+    if not user_input:
+        print(f"Question with ID {question_id} not found!")
+        return
+    
+    # Run the system 10 times with incrementing session numbers
+    for i in range(10):
+        session = str(base_session + i)
+        print(f"Running iteration {i+1}/10 with session {session}")
+        
+        # Create and run the system
+        system = MultiAgentSystem(session=session, step=step)
+        system.run(user_input)
+        
+        print(f"Completed iteration {i+1}/10")
 
-    system.run(user_input)
+    # session = "11000" # This can be anything - numbers are useful for keep tracking of what queries were ran
+    # step = "0" # If -1, will skip saving states.
+    # system = MultiAgentSystem(session = session, step = step)
+
+    # question_id = 11
+
+    # with open("src/data/example_questions.json", "r", encoding='utf-8') as f:
+    #     data = json.load(f)    
+    
+    # user_input = ""
+    # for question in data.get("questions", []):
+    #     if question.get("id") == question_id:
+    #         user_input = question.get("text")
+
+    # system.run(user_input)
 
 
 

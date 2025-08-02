@@ -26,7 +26,7 @@ import genericio as gio
 logger = logging.getLogger(__name__)
 
 @tool(parse_docstring=True)
-def track_halo_evolution(halo_id: str, timestep: int, timestep_column_name: str, x_column_name: str, y_column_name: str, z_column_name: str, size_column_name: str, id_column_name: str, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
+def track_halo_evolution(halo_id: str, timestep: int, timestep_column_name: str, x_coord_column_name: str, y_coord_column_name: str, z_coord_column_name: str, size_column_name: str, id_column_name: str, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
     """
     This tool takes one target halo from one timestep in a dataframe and tracks the evolution of the object across other timesteps.
     It uses a basic algorithm of finding a nearby halo of equivalent size from an adjacent timestep and considers it the same halo.
@@ -35,9 +35,9 @@ def track_halo_evolution(halo_id: str, timestep: int, timestep_column_name: str,
         halo_id: Unique identifier for target halo.
         timestep: The timestep that the target halo can be found in.
         timestep_column_name: Name of the column containing timesteps.
-        x_column_name: Name of the column containing the x coordinate.
-        y_column_name: Name of the column containing the y coordinate.
-        z_column_name: Name of the column containing the z coordinate.
+        x_coord_column_name: Name of the column containing the x coordinate.
+        y_coord_column_name: Name of the column containing the y coordinate.
+        z_coord_column_name: Name of the column containing the z coordinate.
         size_column_name: Name of the column containing the halo size.
         id_column_name: Name of the column containing the halo unique id.
 
@@ -54,7 +54,7 @@ def track_halo_evolution(halo_id: str, timestep: int, timestep_column_name: str,
     count_tolerance = 0.33
 
     conn = duckdb.connect(db_path)
-    coord_columns = [x_column_name, y_column_name, z_column_name]
+    coord_columns = [x_coord_column_name, y_coord_column_name, z_coord_column_name]
 
     timesteps = get_timesteps_from_db(conn, timestep_column_name)
     idx = timesteps.index(timestep)
@@ -72,9 +72,9 @@ def track_halo_evolution(halo_id: str, timestep: int, timestep_column_name: str,
     matched = [{
         timestep_column_name: timestep,
         id_column_name: halo_id,
-        x_column_name: current_center[0],
-        y_column_name: current_center[1],
-        z_column_name: current_center[2],
+        x_coord_column_name: current_center[0],
+        y_coord_column_name: current_center[1],
+        z_coord_column_name: current_center[2],
         size_column_name: current_count
     }]
 
@@ -178,16 +178,16 @@ def get_object_from_db(conn, timestep, timestep_name, object_id, id_name, coord,
 
 
 @tool(parse_docstring=True)
-def generate_pvd_file(timestep_column_name: str, x_column_name: str, y_column_name: str, z_column_name: str, size_column_name: str, id_column_name: str, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
+def generate_pvd_file(timestep_column_name: str, x_coord_column_name: str, y_coord_column_name: str, z_coord_column_name: str, size_column_name: str, id_column_name: str, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
     """
     This tool takes a dataframe with multiple timesteps of an object and generates a .pvd collection file to visualize all the timesteps in ParaView. 
     Use this tool if user asks to visualize the evolution of an object over many timesteps.
 
     Args:
         timestep_column_name: Name of the column containing timesteps.
-        x_column_name: Name of the column containing the x coordinate.
-        y_column_name: Name of the column containing the y coordinate.
-        z_column_name: Name of the column containing the z coordinate.
+        x_coord_column_name: Name of the column containing the x coordinate.
+        y_coord_column_name: Name of the column containing the y coordinate.
+        z_coord_column_name: Name of the column containing the z coordinate.
         size_column_name: Name of the column containing the size metric.
         id_column_name: Name of the column containing the unique id.
 
@@ -199,7 +199,7 @@ def generate_pvd_file(timestep_column_name: str, x_column_name: str, y_column_na
     df_index = state.get("df_index", 0)
     results_list = state.get("results_list", [])
 
-    coord_columns = [x_column_name, y_column_name, z_column_name]
+    coord_columns = [x_coord_column_name, y_coord_column_name, z_coord_column_name]
 
     df_path = results_list[-1][0]
     df = pd.read_csv(df_path)
