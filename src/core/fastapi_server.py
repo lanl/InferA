@@ -1,3 +1,25 @@
+"""
+Module: fastapi_server.py
+Purpose: This FastAPI-based server accepts user-submitted Python (pandas-focused) code 
+         and CSV files, executes the code securely in a restricted environment, and 
+         returns the result.
+
+Features:
+    - Upload up to 5 CSV files and execute custom pandas code on them.
+    - Secure execution environment with restricted built-ins.
+    - Handles exceptions and provides user-friendly error messages.
+    - Returns results as CSV files or raw output.
+
+Endpoints:
+    - GET /          : Health check endpoint.
+    - POST /query/   : Main endpoint for executing code and returning results.
+
+Functions:
+    - query_agent(...)       : Main handler for file uploads and code execution.
+    - extract_problematic_code(...) : Extracts code context around the error line.
+    - handle_exception(...)         : Builds an error response with debug info.
+"""
+
 import traceback
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 
@@ -30,6 +52,18 @@ def read_root():
 async def query_agent(request: Request, pandas_code: str = Form(...), imports: str = Form(...), 
                     file1: UploadFile = File(...), file2: UploadFile = None, file3: UploadFile = None,
                     file4: UploadFile = None, file5: UploadFile = None):
+    """
+    Accepts uploaded CSV files and user-defined pandas code, executes it in a sandboxed
+    environment, and returns the result.
+
+    Args:
+        pandas_code (str): User-submitted code (assumes use of DataFrames like input_df1, etc.).
+        imports (str): Additional user-specified import statements.
+        file1..file5 (UploadFile): Up to 5 CSV files. Only file1 is required.
+
+    Returns:
+        dict: Result including file path (if DataFrame), or raw result (if str, etc.).
+    """
     logger.debug(f"[SANDBOX SERVER] Received pandas_code.")
 
     dfs = []
@@ -53,14 +87,14 @@ async def query_agent(request: Request, pandas_code: str = Form(...), imports: s
                 logger.error(f"[SANDBOX SERVER] Error reading CSV file{i}: {str(e)}")
                 return {"error": f"File{i} reading error: {str(e)}"}
             
-    # Define the execution environment
-    # Remove unsafe builtins
-    safe_builtins = dict(builtins.__dict__)
+    # -- Define restricted global execution environment --
 
-    # Remove unsafe builtins
+    # Copy built-ins and remove dangerous functions
+    safe_builtins = dict(builtins.__dict__)
     for unsafe in ['open', 'eval', 'exec', 'compile', 'input', 'help', 'exit', 'quit']:
         safe_builtins.pop(unsafe, None)
 
+    # Allow user to customize which packages are available here
     safe_globals = {
         '__builtins__': safe_builtins,  # minimal built-ins (customize as needed)
         '__import__': __import__, # Allow __import__
@@ -74,25 +108,26 @@ async def query_agent(request: Request, pandas_code: str = Form(...), imports: s
         'vtk': vtk,
     }
 
-    local_vars = {
-        'input_df1': dfs[0].copy()
-    }
-    
-    # Add additional dataframes if they exist
+    # Create local variables for user code (each DataFrame gets a name like input_df1)
+    local_vars = {'input_df1': dfs[0].copy()}
     for i, df in enumerate(dfs[1:], start=2):
         local_vars[f'input_df{i}'] = df.copy()
 
+
     # Main try-except block
     try:
+        # Combine imports and code
         combined_code = f"{imports}\n\n{pandas_code}"
 
+        # Execute user-submitted code
         exec(combined_code, safe_globals, local_vars)
-        result = local_vars.get("result")
 
+        # Extract user-defined result variable
+        result = local_vars.get("result")
         logger.info(f"[SANDBOX SERVER] Pandas code executed successfully on server.")
         logger.debug(f"[SANDBOX SERVER]      - Result type: {type(result)}")
 
-        # Create a temporary file to store the result
+        # Save result if it's a DataFrame or Series
         temp_dir = tempfile.gettempdir()
         file_uuid = str(uuid.uuid4())
         file_path = os.path.join(temp_dir, f"{file_uuid}.csv")
@@ -110,7 +145,7 @@ async def query_agent(request: Request, pandas_code: str = Form(...), imports: s
         elif result is None:
             return {"raw_result": "", "file_path": "", "type": "none"}
         else:
-            # For other types, convert to string
+            # Catch-all for unexpected result types
             return {"raw_result": result, "file_path": "", "type": "other"}
 
     except (NameError, AttributeError, ValueError, SyntaxError, Exception) as e:
@@ -121,18 +156,39 @@ async def query_agent(request: Request, pandas_code: str = Form(...), imports: s
 
 
 def extract_problematic_code(combined_code, line_number, context_lines=3):
-    """Extract code context around the problematic line."""
+    """
+    Extracts a snippet of code around the error line for better error reporting.
+
+    Args:
+        combined_code (str): Full user-submitted code.
+        line_number (int): Line where the error occurred.
+        context_lines (int): How many lines before/after to include.
+
+    Returns:
+        str: A string with line numbers and surrounding code context.
+    """
     code_lines = combined_code.split('\n')
     start_line = max(0, line_number - context_lines)
     end_line = min(len(code_lines), line_number + context_lines)
     
-    # Add line numbers to the code snippet
-    return "\n".join([f"{i+start_line+1}: {line}" for i, line in 
-                     enumerate(code_lines[start_line:end_line])])
+    return "\n".join([
+        f"{i+start_line+1}: {line}" 
+        for i, line in enumerate(code_lines[start_line:end_line])
+    ])
 
 
 def handle_exception(e, combined_code):
-    """Common exception handling logic."""
+    """
+    Handles exceptions thrown during user code execution and formats a detailed
+    error message, including code context and error type.
+
+    Args:
+        e (Exception): The exception object.
+        combined_code (str): Full executed code (imports + user code).
+
+    Returns:
+        dict: Formatted error information including line number, type, and message.
+    """
     error_type = type(e).__name__
     error_message = str(e)
     
@@ -144,7 +200,7 @@ def handle_exception(e, combined_code):
         
         problematic_code = extract_problematic_code(combined_code, line_number)
         
-        # Add a pointer to the exact error position
+        # Add caret (^) to point at exact error column
         if text and offset:
             code_lines = problematic_code.split('\n')
             # Find the line with the error (should be in the middle of the context)
@@ -159,7 +215,7 @@ def handle_exception(e, combined_code):
         
         error_message = f"There's a syntax error in the provided code: {error_message}"
     else:
-        # For other exceptions, use traceback to find the line number
+        # Use traceback to find the last frame
         tb = sys.exc_info()[2]
         while tb.tb_next:
             tb = tb.tb_next
@@ -177,7 +233,7 @@ def handle_exception(e, combined_code):
     
     logger.error(f"[SANDBOX SERVER] {error_type}: {error_message}", exc_info=True)
     
-    # For general exceptions, include the full traceback
+    # Include full traceback for unknown errors
     if error_type not in ["NameError", "AttributeError", "ValueError", "SyntaxError"]:
         error_traceback = traceback.format_exc()
         error_message = error_traceback

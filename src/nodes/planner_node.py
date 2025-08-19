@@ -1,3 +1,29 @@
+"""
+Module: planner_node.py
+
+Purpose:
+    This module defines a `PlannerNode` that serves as the planning agent for a cosmology 
+    data analysis pipeline. It uses a language model (LLM) to generate a structured plan 
+    in JSON format, consisting of fine-grained steps delegated to specialized team members 
+    such as data loaders, SQL programmers, Python analysts, and visualization agents.
+
+    The node determines whether a task has been approved for execution, and either generates 
+    a detailed plan or proceeds to the next phase of execution.
+
+Classes:
+    - Step (TypedDict): Represents a single step with a description.
+    - FormattedPlan (TypedDict): Represents a full task plan with multiple steps.
+    - Node (PlannerNode): A node that interacts with an LLM to create or approve structured plans.
+
+Usage:
+    Instantiate this node with an LLM that supports structured output. Integrate it into
+    your processing pipeline and pass a state dictionary with a "messages" key.
+
+Example:
+    planner = Node(llm)
+    result = planner({"messages": "Analyze dark matter halo formation across timesteps."})
+"""
+
 import logging
 from typing import List, TypedDict
 from pydantic import Field
@@ -8,17 +34,53 @@ from src.nodes.node_base import NodeBase
 logger = logging.getLogger(__name__)
 
 class Step(TypedDict):
+    """
+    Represents a single step in the analysis plan.
+
+    Fields:
+        description (str): A detailed instruction for a specific team member.
+    """
     description: str = Field(..., description="A single step to accomplish the task")
 
 class FormattedPlan(TypedDict):
+    """
+    Represents the structured output from the planning agent.
+
+    Fields:
+        task (str): The overall task to be completed.
+        steps (List[Step]): A sequential list of fine-grained steps.
+    """
     task: str = Field(..., description="The overall task to be completed")
     steps: List[Step] = Field(..., description="A list of steps to accomplish the task")
 
 class Node(NodeBase):
+    """
+    Planner node that generates a structured multi-step task plan using an LLM.
+
+    Attributes:
+        llm: A language model with structured output capabilities.
+        system_prompt (str): A detailed prompt instructing the LLM on how to plan.
+        prompt_template: ChatPromptTemplate used to format input to the LLM.
+        chain: The full chain combining prompt template and LLM.
+
+    Methods:
+        run(state): Generates a plan or continues to the next step based on approval status.
+        pretty_print_steps(plan): Nicely formats the plan for human-readable logging.
+    """
     def __init__(self, llm):
+        """
+        Initializes the PlannerNode with the provided language model.
+
+        Args:
+            llm: A language model instance with `with_structured_output()` support.
+        """
         super().__init__("PlannerNode")
+
+        # Set up LLM with structured output formatting
         self.llm = llm.with_structured_output(FormattedPlan)
         
+        # This detailed prompt provides the LLM with specific role-based instructions
+        # and workflow constraints for generating analysis plans.
         self.system_prompt = '''
             You are a sophisticated planning agent for a data analysis project and an expert on cosmology simulations, with a specialization in data analysis using pandas dataframes and sql queries.
             Your expertise is in formulating plans and delegating tasks to members of your team to complete tasks related to large-scale cosmology simulation data analysis.
@@ -27,8 +89,8 @@ class Node(NodeBase):
             < Members of your team >
             - DataLoader: This member loads the necessary files for downstream analysis from the large set of files in the database, and is aware of the file contents. 
                 This member writes those files to a database which all other agents will have access to. 
-                If visualization is required, make sure to ask DataLoader to load coordinate data too.
-                If the task requires multiple timesteps and it is unclear how many, be naive and ask it to load all timesteps.
+                If visualization or evolution tracking is required, make sure to ask DataLoader to load x,y,z coordinate data too.
+                If the task requires multiple timesteps and it is unclear how many, ask it to load all timesteps. If only one timestep is necessary, only load the one timestep.
 
             - SQLProgrammer: This member filters data for large datasets. 
                 After DataLoader has loaded the data, SQLProgrammer performs initial filtering to reduce the data volume and exports the filtered data as a CSV file. 
@@ -80,9 +142,21 @@ class Node(NodeBase):
         
         
     def run(self, state):
+        """
+        Runs the planner logic. If a plan is not approved, it invokes the LLM to generate one.
+        If already approved, moves to the next step.
+
+        Args:
+            state (dict): A dictionary with the current state. Must include "messages" key.
+
+        Returns:
+            dict: Updated state containing the generated plan or a transition message.
+        """
         task = state["messages"]
         approved = state.get("approved", False)
+        
         if not approved: 
+            # Plan not yet approved — generate one
             response = self.chain.invoke({'message': task})
             return {
                 "messages": [{
@@ -92,7 +166,7 @@ class Node(NodeBase):
                 "plan": response, 
                 "current": "Planner",
                 "next": "HumanFeedback"
-                }
+            }
         else:
             # Skip planning; assume existing plan is approved
             return {
@@ -107,6 +181,15 @@ class Node(NodeBase):
     
 
     def pretty_print_steps(self, plan):
+        """
+        Logs and returns a human-readable version of the structured plan.
+
+        Args:
+            plan (FormattedPlan): The structured plan from the LLM.
+
+        Returns:
+            str: A formatted string of task and step descriptions.
+        """
         str = f"\n\033[1;35mTask: {plan["task"]}\033[0m\n\n"
         count = 1
         for i in plan['steps']:

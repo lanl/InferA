@@ -1,3 +1,21 @@
+"""
+Module: custom_tools.py
+
+Tooling utilities for LangChain that enable:
+- Tracking the evolution of a specific object ("halo") across simulation timesteps using spatial and size proximity.
+- Generating .PVD and .VTP files for visualizing halo evolution in ParaView.
+
+Includes:
+- `track_halo_evolution`: Tracks an object's evolution using a nearest-neighbor matching heuristic.
+- `generate_pvd_file`: Converts the tracked object data into VTK format for visualization.
+
+Dependencies:
+- LangChain (tooling integration)
+- DuckDB (querying simulation data)
+- VTK (generating visualization files)
+- Pandas, NumPy, tqdm (data handling and utilities)
+"""
+
 import os
 import sys
 import logging
@@ -15,15 +33,16 @@ from langgraph.types import Command
 from langgraph.prebuilt import InjectedState
 
 from src.utils.dataframe_utils import pretty_print_df
-
 from config import WORKING_DIRECTORY
 
-
+# Import legacy genericio Python interface
 genericio_path = "genericio/legacy_python/"
 sys.path.append(genericio_path)
 import genericio as gio
 
 logger = logging.getLogger(__name__)
+
+
 
 @tool(parse_docstring=True)
 def track_halo_evolution(halo_id: str, timestep: int, timestep_column_name: str, x_coord_column_name: str, y_coord_column_name: str, z_coord_column_name: str, size_column_name: str, id_column_name: str, state: Annotated[dict, InjectedState], tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
@@ -45,30 +64,37 @@ def track_halo_evolution(halo_id: str, timestep: int, timestep_column_name: str,
         str: Path to the dataframe that halo evolution was written to.
     """
     session_id = state.get("session_id", "")
-
     db_path = state.get("db_path", "")
     df_index = state.get("df_index", 0)
     results_list = state.get("results_list", [])
 
+    # Tuning parameters:
+    # `distance_threshold`: max Euclidean distance to consider another halo a match
+    # `count_tolerance`: acceptable relative difference in halo size
     distance_threshold = 2
     count_tolerance = 0.33
 
+    # Connect to the simulation database
     conn = duckdb.connect(db_path)
     coord_columns = [x_coord_column_name, y_coord_column_name, z_coord_column_name]
 
+    # Get all unique timesteps, sorted
     timesteps = get_timesteps_from_db(conn, timestep_column_name)
     idx = timesteps.index(timestep)
 
     if timestep not in timesteps:
         raise ValueError(f"Timestep {timestep} not found in DB.")
 
-    # Fetch target object
+    # Retrieve the starting (target) halo object
     row = get_object_from_db(conn, timestep, timestep_column_name, halo_id, id_column_name, coord_columns, size_column_name)
     if row is None:
         raise ValueError(f"Object {halo_id} not found at timestep {timestep}")
+    
+    # Current halo's spatial center and size
     current_center = np.array([row[0], row[1], row[2]])
     current_count = row[3]
 
+    # Save the initial halo to the results
     matched = [{
         timestep_column_name: timestep,
         id_column_name: halo_id,
@@ -77,24 +103,34 @@ def track_halo_evolution(halo_id: str, timestep: int, timestep_column_name: str,
         z_coord_column_name: current_center[2],
         size_column_name: current_count
     }]
-
+    
+    # Forward: search future timesteps for matching halos
     forward = track_direction(
         conn, timesteps[idx+1:], current_center, current_count,
         distance_threshold, count_tolerance, timestep_column_name, id_column_name, coord_columns, size_column_name
     )
 
+    # Backward: search past timesteps
     backward = track_direction(
         conn, reversed(timesteps[:idx]), current_center, current_count,
         distance_threshold, count_tolerance, timestep_column_name, id_column_name, coord_columns, size_column_name
     )
 
+    # Combine backward + original + forward results
     all_entries = list(backward)[::-1] + matched + list(forward)
     compiled_df = pd.DataFrame(all_entries)
+
+    # Preview the results in table format   
     pretty_output = pretty_print_df(compiled_df, max_rows=5)
 
+    # Save results to disk under session folder
     file = f"{WORKING_DIRECTORY}{session_id}/{session_id}_{df_index}.csv"
     compiled_df.to_csv(file, index=False)
+
+    # Append result metadata for LangChain to track
     results_list.append((file, f"Calculated all halos equivalent to halo ID = {halo_id} for all timesteps using nearest neighbor in adjacent timesteps.", "Track evolution tool: The output is a dataframe where each row is a timestep tracking a target halo."))
+    
+    # Increment for next result
     df_index +=1
 
     return Command(update={

@@ -1,3 +1,14 @@
+"""
+Module: dataframe_utils.py
+Purpose: Provides utility functions for formatting and printing `pandas` DataFrames and Python dictionaries 
+         in a clean, readable format using the `tabulate` library.
+
+Functions:
+    - pretty_print_df(df, max_rows, tablefmt, return_output): Prints or returns a truncated and formatted view of a DataFrame.
+    - pretty_print_dict(data, max_items, tablefmt, return_output): Prints or returns a formatted view of a dictionary with key-value pairs.
+"""
+
+
 import shutil
 import pandas as pd
 from typing import Any, Dict

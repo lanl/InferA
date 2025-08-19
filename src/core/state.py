@@ -1,57 +1,79 @@
+"""
+Module: state.py
+
+Purpose:
+    Defines the shared conversational state structure used in LangGraph-based multi-agent workflows.
+    This `State` class captures the full memory and context required for decision-making across nodes,
+    including message history, current task tracking, data analysis status, QA cycles, and more.
+
+Notes:
+    - The state is passed between nodes in the LangGraph DAG.
+    - All message updates are tracked using the `add_messages` update function.
+    - This structure can evolve based on application complexity.
+
+Dependencies:
+    - langchain_core.messages.BaseMessage
+    - langgraph.graph.message.add_messages
+"""
+
 from typing import TypedDict, Annotated
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
+
+
 class State(TypedDict):    
-    # Sequence of messages exchanged
-    messages: Annotated[list[BaseMessage], add_messages]
-    user_inputs: Annotated[list[BaseMessage], add_messages]
+    # === Message History ===
+    messages: Annotated[list[BaseMessage], add_messages] # Full message history
+    user_inputs: Annotated[list[BaseMessage], add_messages] # User-specific messages (for filtering)
 
-    session_id: str
+    # === Session & Model Info ===
+    session_id: str                       # Unique identifier for the conversation/session
+    model: str                            # Identifier for the model being used (OpenAI, Ollama, etc.)
 
-    model: str
+    # === Graph Navigation State ===
+    current: str                          # Current LangGraph node
+    next: str                             # Next LangGraph node (used for transitions)
 
-    current: str
-    next: str
+    # === Shared Result Container ===
+    result: str                           # General-purpose result (used between nodes)
 
-    result: str
+    # === Supervisor Node Tracking ===
+    task: str                             # Current high-level task (e.g., "generate plot")
+    base_task: str                        # Persistent default task for fallback for QA fails
+    current_step: int                     # Current step index in task execution
 
-    # supervisor node
-    task: str
-    base_task: str # store default task to the agent to regenerate if needed
-    current_step: int
-
-    # human feedback
-    approved: bool
-    approve_msg: str
+    # === Human-in-the-Loop Feedback ===
+    approved: bool                        # Whether the last result was approved by a human
+    approve_msg: str                      # Optional feedback message from human
     
-    # store important msgs for specific error handling use
-    stashed_msg: str
+    # === Error Recovery ===
+    stashed_msg: str                      # Important message to stash for recovery after error
 
-    # dataloader node
-    file_index: dict
-    object_type: list
-    current_obj: int # This allows dataloader to loop through all the different objects needed to process
+    # === DataLoader Node ===
+    file_index: dict                      # Mapping of file names to hierarchy
+    object_type: list                     # Types of loaded objects (e.g., "halo", "galaxy", "haloparticles")
+    current_obj: int                      # Index of the current object being processed
 
-    # written database information
-    db_path: str
-    db_tables: list
-    db_columns: list[list]
+    # === Database Information ===
+    db_path: str                          # Path to connected duckDB database
+    db_tables: list                       # List of table names in the DB
+    db_columns: list[list]                # List of columns per table
 
-    # retriever node
-    retrieved_docs: dict
+    # === Retriever Node ===
+    retrieved_docs: dict                  # Documents retrieved during context search
 
-    # planner node
-    plan: dict
+    # === Planner Node ===
+    plan: dict                            # Parsed task plan from planner agent
 
-    # data analysis nodes
-    results_list: list
-    working_results: list # This is for written results that are flagged by QA agent does not get added to results_list so that it can be re-run
-    df_index: int
+    # === Data Analysis Results ===
+    results_list: list                    # List of finalized results
+    working_results: list                 # Intermediate or unapproved results (retryable)
+    df_index: int                         # Index for tracking which DataFrame is in focus
 
-    # qa node
-    qa_retries: int
-    qa_failed: bool
+    # === QA Node State ===
+    qa_retries: int                       # Count of QA attempts for current task
+    qa_failed: bool                       # Whether the QA node has flagged the result as failed
 
-    # documentation node
-    last_documentation: str
+    # === Documentation Node ===
+    last_documentation: str              # Most recent generated documentation text

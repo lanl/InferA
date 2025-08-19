@@ -1,3 +1,13 @@
+"""
+Module: dataframe_query_client.py
+Purpose: This module enables sending pandas DataFrames along with transformation code to a
+         remote FastAPI-based agent for execution. Useful in sandboxed environments or
+         when offloading heavy or controlled pandas operations.
+
+Functions:
+    - query_dataframe_agent(dfs, pandas_code, imports, api_url): Sends DataFrames and code to the API agent and returns the result.
+"""
+
 import os
 import requests
 import pandas as pd
@@ -25,8 +35,9 @@ def query_dataframe_agent(dfs: List[pd.DataFrame], pandas_code: str, imports: st
         files = {}
         temp_files = []
 
+        # multiple dataframes can be loaded at once, each named input_df1, input_df2,... etc
         for i, df in enumerate(dfs):
-            # Save the DataFrame to a temporary CSV file
+            # Save each DataFrame to a temporary CSV file stored in files[]
             with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
                 temp_file_path = tmp.name
                 df.to_csv(temp_file_path, index=False)
@@ -35,12 +46,13 @@ def query_dataframe_agent(dfs: List[pd.DataFrame], pandas_code: str, imports: st
                 file_param_name = f'file{i+1}'
                 files[file_param_name] = open(temp_file_path, 'rb')
 
+        # send code, imports and temp files to be processed
         data = {'pandas_code': pandas_code, 'imports': imports}
         logger.debug(f"[SANDBOX CLIENT] Preparing to send POST request. Data: {data}, df tempfile: {files}.")
         
         query_res = requests.post(f"{api_url}/query/", files=files, data=data)
 
-        # Delete the temporary file
+        # After query is done, delete the temporary files
         try:
             os.unlink(temp_file_path)
         except Exception as e:
@@ -50,6 +62,7 @@ def query_dataframe_agent(dfs: List[pd.DataFrame], pandas_code: str, imports: st
             logger.error(f"Query failed. Status code: {query_res.status_code}")
             raise Exception(f"Query failed: {query_res.text}")
 
+        # Read response as json
         response_json = query_res.json()
 
         # Check if there was an error in execution
@@ -92,6 +105,7 @@ def query_dataframe_agent(dfs: List[pd.DataFrame], pandas_code: str, imports: st
         except Exception as e:
             logger.warning(f"[SANDBOX CLIENT] Failed to delete result file: {e}. This is only a warning if intending to generate new csv file. Visualization agent does not produce result file.")
         
+        # Return results
         logger.debug(f"[SANDBOX CLIENT] Query successful. Result type: {type(result)}")
         return result
 

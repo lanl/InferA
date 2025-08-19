@@ -1,3 +1,19 @@
+"""
+Module: qa_node.py
+Purpose: This module defines a QA Node for evaluating agent responses to data analysis tasks,
+         particularly in the context of scientific workflows involving pandas, SQL, and cosmology simulations.
+
+It leverages structured output from a language model to assess the quality of responses,
+provides a scoring mechanism, and delivers actionable feedback or escalates the task if
+quality thresholds are not met.
+
+Functions and Classes:
+    - FormattedReview: TypedDict defining the structured format for the QA model's response.
+    - Node: Inherits from NodeBase, encapsulates the QA logic using an LLM pipeline.
+        - __init__(self, llm): Initializes the QA node with system prompts and structured output.
+        - run(self, state): Executes QA evaluation and routes the task based on the score.
+"""
+
 import logging
 from typing import TypedDict
 from langchain_core.prompts import ChatPromptTemplate
@@ -8,10 +24,13 @@ from src.tools.human_feedback import human_feedback
 
 from config import MESSAGE_HISTORY, DISABLE_FEEDBACK
 
-
 logger = logging.getLogger(__name__)
 
+
 class FormattedReview(TypedDict):
+    """
+    Structured output format expected from the QA language model.
+    """
     score: int = Field(...,
         description="A numeric grade for the output between 1 and 100. "
                     "1-20: Poor, 21-40: Fair, 41-60: Good, 61-80: Very Good, 81-100: Excellent. "
@@ -25,9 +44,21 @@ class FormattedReview(TypedDict):
     confidence: float = Field(..., description="A value between 0 and 1 indicating the AI's confidence in its review and suggestions.")
 
 class Node(NodeBase):
+    """
+    QA Node class that evaluates the quality of responses from agents and either
+    approves, resets, retries, or escalates the task based on scoring thresholds.
+
+    Attributes:
+        llm: Language model instance with structured output enabled.
+        system_prompt: Prompt used to instruct the QA evaluation agent.
+        prompt_template: Chat prompt template composed of system and user messages.
+        chain: Combined chain that evaluates agent responses.
+    """
     def __init__(self, llm):
         super().__init__("QA")
         self.llm = llm.with_structured_output(FormattedReview)
+
+        # Customize the system prompt here to change QA behavior or supported domains
         self.system_prompt = (
             """
             You are a Quality Assurance (QA) expert specialized in pandas, SQL, and scientific data workflows for cosmology simulation analysis projects.
@@ -79,6 +110,15 @@ class Node(NodeBase):
         
     
     def run(self, state):
+        """
+        Run QA evaluation on the current agent response.
+
+        Args:
+            state (dict): Current state of the system including the task, messages, and retry count.
+
+        Returns:
+            dict: Updated state dict with next routing decision based on QA result.
+        """
         previous_node = state["current"]
         task = state["task"]
         base_task = state.get("base_task", task)
@@ -90,17 +130,19 @@ class Node(NodeBase):
         results_list = state.get("results_list", [])
         working_results = state.get("working_results", [])
         
-        # When qa_retries matches reset_retry, reset once.
-        reset_retry = 2 # reset every other n retries
-        max_retries = 4
-        threshold = 50
+        # Retry configuration (can be adjusted based on use case)
+        reset_retry = 2 # Retry frequency before resetting
+        max_retries = 4 # Max number of retries before escalation
+        threshold = 50 # Score threshold to pass QA
+
+        # Gather human feedback unless disabled
         if DISABLE_FEEDBACK:
             approved = None
             feedback = ""
         else:
             feedback, approved = human_feedback(stashed_msg)
         
-
+        # Invoke the LLM with QA instructions
         response = self.chain.invoke({
             'message': messages[-MESSAGE_HISTORY:], 
             'task':task,
@@ -111,10 +153,11 @@ class Node(NodeBase):
             "user_feedback": feedback
         })
 
+        # Attempt to parse structured response from LLM
         try:
             score = int(response.get("score", 0))
             original_task = response.get("original_task", "")
-            revisions = response.get("task", "")
+            revisions = response.get("task", "") # This is the new task
             before_example = response.get("before_example", "")
             after_example = response.get("after_example", "")
             summary = response.get("summary", "")
@@ -131,7 +174,7 @@ class Node(NodeBase):
             confidence = 0
         
         logger.info(f"[QA] EVALUATION\n   Score: {score}\n    Confidence: {confidence}\n\n")
-        # revised_task = f"< INITIAL TASK >\n{task}\n\n< Critiques >\n{critique}\n\n< REVISIONS NEEDED >\n{revisions}\n\n"
+
         revised_task = f"""
             ORIGINAL TASK: {original_task}
 
@@ -148,17 +191,21 @@ class Node(NodeBase):
         """
         logger.debug(revised_task)
 
+        # If score is below threshold, prepare for retry or escalation
         if score < threshold:
             logger.info(f"Summary of changes:\n{summary}\n\nRevisions:\n{revisions}\n\n")
             qa_retries += 1
 
             if qa_retries > max_retries:
+                # Escalate task to supervisor
                 return {
                     "messages": [{"role": "assistant", "content": f"❌ \033[1;31mMaximum QA retries reached with score {score}. Failed to complete the task: {task}\n\n. Escalating to Supervisor.\033[0m"}],
                     "task": revised_task,
                     "next": "Documentation",
                     "qa_retries": 0,
                 }
+
+            # Decide if the task should be reset or retried with revisions
             should_reset = qa_retries % 2 == 0
             if should_reset:
                 logger.info(f"[QA] Resetting task from clean slate after {qa_retries}.")

@@ -1,3 +1,18 @@
+"""
+Utilities for pretty-printing LangChain messages and updates with structured indentation.
+
+These functions help log messages in a readable, formatted style with optional indentation for nested subgraph updates.
+
+Usage example:
+    from your_module import pretty_print_messages
+
+    # Log updates normally
+    pretty_print_messages(update_data)
+
+    # Log only the last message from each node
+    pretty_print_messages(update_data, last_message=True)
+"""
+
 import logging
 from langchain_core.messages import convert_to_messages
 

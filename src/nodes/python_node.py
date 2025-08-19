@@ -1,3 +1,31 @@
+"""
+Module: python_node.py
+
+Purpose:
+    This module defines a `PythonProgrammer` node that executes complex data analysis 
+    tasks using Pandas and NumPy. It receives task instructions, loads relevant CSV data,
+    invokes a language model to generate Python code, executes the code on the data, and
+    returns the result along with explanations. It is designed for use within a multi-agent
+    pipeline for cosmology simulations or other scientific analysis workflows.
+
+Classes:
+    - Node: Executes Python code generation and analysis using structured LLM tools.
+
+Functions:
+    - run(state): Main execution flow. Loads data, invokes LLM, runs generated code, and handles result.
+    - _load_dataframe(data_path): Loads one or more CSV files from the given paths.
+    - _aggregate_results_description(results_list): Aggregates explanations from previous steps.
+    - _call_load(): Creates a prompt chain to select data files to load.
+    - _call_tool(): Creates a prompt chain to generate transformation code for the loaded data.
+    - _handle_result(...): Executes and logs results from generated code.
+    - _error_response(message): Returns standardized error response.
+
+Usage:
+    Instantiate this node with an LLM and tool configurations:
+        node = Node(llm, code_tools, load_tools)
+        result = node.run(state_dict)
+"""
+
 import os
 import logging
 import pandas as pd
@@ -11,10 +39,21 @@ from src.utils.dataframe_utils import pretty_print_df, pretty_print_dict
 
 from config import WORKING_DIRECTORY
 
-
 logger = logging.getLogger(__name__)
 
+
+
 class Node(NodeBase):
+    """
+    PythonProgrammer Node: Executes Python-based data analysis using LLM-generated code.
+
+    Attributes:
+        llm: LLM bound with toolset for code generation.
+        load_llm: LLM bound with file selection tools.
+        session_id (str): Unique session ID for tracking results.
+        call_load: Prompt chain for data file selection.
+        call_tool: Prompt chain for code generation and transformation.
+    """
     def __init__(self, llm, code_tools, load_tools):
         super().__init__("Python")
         self.load_llm = llm.bind_tools(load_tools, parallel_tool_calls = False)
@@ -24,37 +63,48 @@ class Node(NodeBase):
         self.session_id = None
     
     def run(self, state):
+        """
+        Executes the main logic of the node.
+
+        Args:
+            state (dict): Dictionary with keys including:
+                - task (str): Analysis instruction
+                - session_id (str): Session identifier
+                - results_list (list): Previous tool outputs
+                - df_index (int): Index for output filenames
+
+        Returns:
+            dict: Resulting state for pipeline continuation
+        """
         task = state["task"]
         self.session_id = state.get("session_id", "")
 
         results_list = state.get("results_list", [])
         df_index = state.get("df_index", 0)
 
-        print(results_list)
-        # Aggregate all explanations for previous dfs
+        # Describe all previously generated results
         output_descriptions= self._aggregate_results_description(results_list)
 
         try:
+            # LLM selects which data files to load
             response = self.call_load.invoke({
                 "task": task,
                 "output_descriptions": output_descriptions
             })
         except Exception as e:
             return self._error_response(f"LLM failed to generate tool.\nError:\n{e}")
-        
-        print(response)
-        
+                
         tool_calls = response.tool_calls
         data_paths = tool_calls[0]['args']['data_paths']
-        logger.info(f"[PYTHON PROGRAMMER] To best answer the task, using data from {data_paths}")
+        logger.info(f"[PYTHON PROGRAMMER] Using data from {data_paths}")
 
-        # Load dataframes for processing
+        # Load the selected dataframes
         dfs = self._load_dataframe(data_paths)
         if dfs is None:
             error_msg = "[PYTHON PROGRAMMER] Failed to load any dataframe for processing."
             return self._error_response(error_msg)
         
-        # Create a comprehensive description of all dataframes
+        # Summarize all DataFrames for the LLM
         all_dfs_info = []
         for i, df in enumerate(dfs):
             df_info = f"DataFrame {i+1}:\n"
@@ -69,6 +119,7 @@ class Node(NodeBase):
         all_dfs_description = "\n".join(all_dfs_info)
 
         try:
+            # Generate Python transformation code based on task
             response = self.call_tool.invoke({
                 "task": task, 
                 "dataframes_info": all_dfs_description,
@@ -85,56 +136,50 @@ class Node(NodeBase):
         logger.debug(f"[PYTHON PROGRAMMER] Tools called: {tool_calls}")
         
         if tool_calls.get("name") != 'GenerateCode':
+            # If another tool is called, route to tool executor
             return {"messages": [response], "next": "PythonTool", "current": "PythonProgrammer"}
 
-        # code_response = [t for t in tool_calls if t.get("name") == 'GenerateCode']
-        # other_tools = [t for t in tool_calls if t.get("name") != 'GenerateCode']
+        # Extract and execute code
+        code_response = tool_calls
+        import_code = code_response['args']['imports']
+        python_code = code_response['args']['python_code']
+        result_output_code = code_response['args']['result_output_code']
+        explanation = code_response['args']['explanation']
+        output_description = code_response['args']['output_description']
+        python_code = python_code + "\n" + result_output_code
 
-        # if other_tools:
-        #     return {"messages": other_tools, "next": "PythonTool", "current": "PythonProgrammer"}
-        elif tool_calls.get("name") == 'GenerateCode':
-            code_response = tool_calls
-
-            import_code = code_response['args']['imports']
-            python_code = code_response['args']['python_code']
-            result_output_code = code_response['args']['result_output_code']
-            explanation = code_response['args']['explanation']
-            output_description = code_response['args']['output_description']
-
-            python_code = python_code + "\n" + result_output_code
-
-            logger.debug(f"\033[1;30;47m[PYTHON PROGRAMMER] Imports:\n\n{import_code}\n\nGenerated code:\n\n{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
-            # Execute the code safely from fastAPI server
-            try:
-                result = query_dataframe_agent(dfs, python_code, imports=import_code)
-                
-                # Handle different result types
-                if isinstance(result, pd.DataFrame):
-                    # Result is already a DataFrame, no conversion needed
-                    pass
-                elif isinstance(result, pd.Series):
-                    # Convert Series to DataFrame
-                    result = result.to_frame()
-                elif result is None:
-                    # Handle None result
-                    result = pd.DataFrame()  # Empty DataFrame or appropriate message
-                elif isinstance(result, str):
-                    # If result is a string, you might want to display it differently
-                    # or convert it to a DataFrame with a single cell
-                    result = pd.DataFrame({'result': [result]})
-                else:
-                    # For other types, convert to string and then to DataFrame
-                    result = pd.DataFrame({'result': [str(result)]})
-                
-            except Exception as e:
-                return self._error_response(f"Failed to execute code on server\n\nError:{e}\n\nCode: {import_code}\n{python_code}")
+        logger.debug(
+            f"\033[1;30;47m[PYTHON PROGRAMMER] Imports:\n\n{import_code}\n\n"
+            f"Generated code:\n\n{python_code}\n\nExplanation:\n{explanation}\033[0m\n\n")
         
-            return self._handle_result(result, import_code, python_code, explanation, output_description, df_index)
+
+        # Execute the code safely from fastAPI server
+        try:
+            result = query_dataframe_agent(dfs, python_code, imports=import_code)
+            # Normalize result type
+            if isinstance(result, pd.Series):
+                result = result.to_frame()
+            elif result is None:
+                result = pd.DataFrame()
+            elif isinstance(result, str):
+                result = pd.DataFrame({'result': [result]})
+            elif not isinstance(result, pd.DataFrame):
+                result = pd.DataFrame({'result': [str(result)]})
+        except Exception as e:
+            return self._error_response(f"Failed to execute code on server\n\nError:{e}\n\nCode: {import_code}\n{python_code}")
+    
+        return self._handle_result(result, import_code, python_code, explanation, output_description, df_index)
 
 
     def _load_dataframe(self, data_path):
         """
-        Load dataframe either from CSV files in results_list or from a database.
+        Load one or more CSV files as DataFrames.
+
+        Args:
+            data_path (list[str]): List of file paths
+
+        Returns:
+            list[pd.DataFrame] or None
         """
         dfs = []
         try:
@@ -144,7 +189,6 @@ class Node(NodeBase):
             if not dfs:
                 logger.error(f"No CSV files found in results_list: {data_path}.")
                 return None
-            # combined_df = pd.concat(dfs)
             logger.debug(f"[PYTHON PROGRAMMER] Loaded and concatenated CSV dataframes.")
             return dfs
 
@@ -155,8 +199,13 @@ class Node(NodeBase):
 
     def _aggregate_results_description(self, results_list):
         """
-        Aggregate explanations from previous results.
-        Handles cases where explanation is a dict instead of a string.
+        Aggregates explanation snippets from earlier results.
+
+        Args:
+            results_list (list): List of previous tool outputs
+
+        Returns:
+            list[str]: List of formatted description strings
         """
         description = []
         for path, _, output in results_list:
@@ -165,6 +214,9 @@ class Node(NodeBase):
 
 
     def _call_load(self):
+        """
+        Builds the LLM chain for selecting which CSV files to load.
+        """
         system_prompt = (
             """
             You are a python coding assistant with expertise in working with the Pandas library.
@@ -182,7 +234,6 @@ class Node(NodeBase):
 
             """
         )
-    
         prompt_template = PromptTemplate(
             template=system_prompt,
             input_variables=["task", "output_descriptions"],
@@ -190,6 +241,9 @@ class Node(NodeBase):
         return prompt_template | self.load_llm    
 
     def _call_tool(self):
+        """
+        Builds the LLM chain for generating transformation code.
+        """
         system_prompt = (
             """
             You are a python coding assistant with expertise in working with the Pandas library.
@@ -254,7 +308,18 @@ class Node(NodeBase):
 
     def _handle_result(self, result, import_code, python_code, explanation, output_description, df_index):
         """
-        Process the result returned by executing the generated code.
+        Post-processes execution result: saves files, formats message.
+
+        Args:
+            result (pd.DataFrame|dict|str): Result from executing the generated code
+            import_code (str): Import statements
+            python_code (str): Executable Python code
+            explanation (str): Explanation from LLM
+            output_description (str): Description of result
+            df_index (int): Output file index
+
+        Returns:
+            dict: State to pass to next pipeline node
         """
         working_results = []
         if isinstance(result, pd.DataFrame):
@@ -263,12 +328,12 @@ class Node(NodeBase):
             result.to_csv(return_file, index=False)
             working_results.append((return_file, explanation, output_description))
             pretty_output = pretty_print_df(result, return_output=True, max_rows=5)
-
             pretty_output += f"\n\nColumns in dataframe:\n{list(result.columns)}\n\nDataFrame (first few rows):\n```{result.head(5)}```\n"
 
         elif isinstance(result, dict):
             working_results.append((f"python_{df_index}", result, output_description))
             pretty_output = pretty_print_dict(result, return_output=True, max_items=5)
+
         else:
             pretty_output = str(result)
 
@@ -277,27 +342,13 @@ class Node(NodeBase):
 
         try:
             file_path = os.path.join(WORKING_DIRECTORY, self.session_id, f"{self.session_id}_{df_index}.py")
-            
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             logger.debug(f"[PYTHON PROGRAMMER] Ensured directory exists: {os.path.dirname(file_path)}")
 
             with open(file_path, 'w') as file:
-                # Write the imports
-                file.write("# Imports\n")
-                file.write(str(import_code))
-                file.write("\n\n")
-
-                # Write the explanations
-                file.write("# Explanations\n")
-                file.write("'''")
-                file.write(str(explanation))
-                file.write("'''")
-                file.write("\n\n")
-
-                # Write the Python code
-                file.write("# Python Code\n")
-                file.write(str(python_code))
-                file.write("\n")
+                file.write("# Imports\n" + str(import_code) + "\n\n")
+                file.write("# Explanations\n'''\n" + str(explanation) + "\n'''\n\n")
+                file.write("# Python Code\n" + str(python_code) + "\n")
                 
             df_index += 1
         except Exception as e:
@@ -315,7 +366,13 @@ class Node(NodeBase):
 
     def _error_response(self, message):
         """
-        Helper for consistent error response format.
+        Handles consistent error messaging across the node.
+
+        Args:
+            message (str): Error details
+
+        Returns:
+            dict: Error response state
         """
         logger.error(f"\033[1;31m{message}\033[0m")
         return {

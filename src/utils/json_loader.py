@@ -1,11 +1,26 @@
+"""
+Module: json_utils.py
+Purpose: Utility functions for working with the structured data variable JSON file,
+         including loading the file, extracting variable names, and retrieving descriptions.
+
+Functions:
+    - open_json(filepath): Loads JSON from a file.
+    - get_variable_names_from_json(object_type): Returns all variable names for a given object type.
+    - get_field_descriptions_from_json(object_type): Returns field:description mapping for an object type.
+"""
+
 import json
+from config import DATA_DICT_PATH
+
+# Path to the structured variable description file
+DATA_VARIABLES = f"{DATA_DICT_PATH}data_variables.json"
+
 
 def open_json(filepath: str):
+    """Opens and reads a JSON file from the given path."""
     with open(filepath, 'r') as f:
         data = json.load(f)
     return data
-
-DATA_VARIABLES = "src/data/JSON/data_variables.json"
 
 def get_variable_names_from_json(object_type: str) -> dict:
     """

@@ -1,21 +1,35 @@
+"""
+Module: llm_models.py
+Purpose:
+    This module manages the initialization and orchestration of multiple Large Language Models (LLMs),
+    supporting integration with LanlAI (private cloud), OpenAI, and local Ollama models. It also tracks
+    token usage and enforces limits for cost control and safety.
+
+Classes:
+    - LanguageModelManager: Main orchestrator that initializes LLMs based on config flags.
+    - TokenAwareChatOpenAI: Subclass of ChatOpenAI that adds token usage enforcement.
+    - TokenTrackingHandler: Callback handler that logs token usage and calculates cost.
+
+Usage:
+    manager = LanguageModelManager()
+    models = manager.get_models()
+    llm = models["llm"]
+"""
+
 import sys
 import logging
 from pydantic import PrivateAttr
 
-from langchain_ollama import ChatOllama
-from langchain_ollama import OllamaEmbeddings
-
-from langchain_openai import ChatOpenAI
-from langchain_openai import OpenAIEmbeddings
-
+from langchain_ollama import ChatOllama, OllamaEmbeddings
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain.callbacks.base import BaseCallbackHandler
 from openai import DefaultHttpxClient
 
-# import all lanlAI configs
+
+# --- Configuration imports ---
 from config import (
     MAX_TOKEN_LIMIT
 )
-
 from config import (
     ENABLE_LANLAI, 
     LANLAI_API_URL, 
@@ -29,7 +43,6 @@ from config import (
     OPENAI_MODEL_NAME,
     OPENAI_EMBED_MODEL_NAME
 )
-# import all local ollama configs
 from config import (
     OLLAMA_API_URL, 
     OLLAMA_MODEL_NAME,
@@ -39,6 +52,10 @@ from config import (
 logger = logging.getLogger(__name__)
 
 class LanguageModelManager:
+    """
+    Manages initialization of different LLM providers (LanlAI, OpenAI, Ollama)
+    based on configuration flags. Also sets up embedding models and token tracking.
+    """
     def __init__(self):
         """Initialize language model manager"""
         self.logger = logger
@@ -51,14 +68,20 @@ class LanguageModelManager:
         self.initialize_llms()
 
     def initialize_llms(self):
-        """Initialize LLMs"""
+        """
+        Initializes the appropriate LLM and embedding model based on which service is enabled.
+        Order of priority: LanlAI > OpenAI > Ollama (local).
+        """
         try:
             server = None
             model = None
+
             if ENABLE_LANLAI:
                 server = "LanlAI Portal"
                 model = LANLAI_MODEL_NAME
                 embed_model = OLLAMA_EMBED_MODEL_NAME + " (via Local Ollama)"
+
+                # LanlAI-based LLMs
                 self.llm = ChatOpenAI(
                     api_key = LANLAI_API_TOKEN,
                     model = LANLAI_MODEL_NAME,
@@ -93,6 +116,8 @@ class LanguageModelManager:
                 server = "OpenAI API"
                 model = OPENAI_MODEL_NAME
                 embed_model = OPENAI_EMBED_MODEL_NAME
+
+                # OpenAI-based LLMs (uses token-aware wrapper)
                 self.llm = TokenAwareChatOpenAI(
                     api_key = OPENAI_API_KEY,
                     model_name = OPENAI_MODEL_NAME,
@@ -127,7 +152,8 @@ class LanguageModelManager:
                 server = "Local Ollama"
                 model = OLLAMA_MODEL_NAME
                 embed_model = OLLAMA_EMBED_MODEL_NAME
-                # Default to local Ollama model
+
+                # Fallback: use local Ollama
                 self.llm = ChatOpenAI(
                     model=OLLAMA_MODEL_NAME,
                     api_key = "ollama",
@@ -183,6 +209,9 @@ class LanguageModelManager:
 
 
 class TokenAwareChatOpenAI(ChatOpenAI):
+    """
+    Extension of ChatOpenAI that integrates token tracking to prevent exceeding limits.
+    """
     _token_tracker: BaseCallbackHandler = PrivateAttr()
 
     def __init__(self, *args, token_tracker: BaseCallbackHandler, **kwargs):
@@ -196,6 +225,10 @@ class TokenAwareChatOpenAI(ChatOpenAI):
 
 
 class TokenTrackingHandler(BaseCallbackHandler):
+    """
+    Tracks prompt, completion, and cache tokens used by the model and calculates estimated cost.
+    Enforces a maximum token limit to prevent runaway usage.
+    """
     def __init__(self):
         self.logger = logger
         self.prompt_tokens = 0
@@ -204,10 +237,10 @@ class TokenTrackingHandler(BaseCallbackHandler):
         self.cache_tokens = 0
         self.max_token_limit = MAX_TOKEN_LIMIT
 
-        # Pricing per million tokens ($)
-        self.cost_per_million_prompt = 2
-        self.cost_per_million_completion = 8
-        self.cost_per_million_cache = 0.5
+        # Pricing per million tokens ($) - Users can customize pricing here (per 1M tokens)
+        self.cost_per_million_prompt = 0
+        self.cost_per_million_completion = 0
+        self.cost_per_million_cache = 0
     
     def on_llm_start(self, *args, **kwargs):
         if self.check_limit_exceeded():

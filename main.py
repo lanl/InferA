@@ -95,7 +95,7 @@ class MultiAgentSystem:
                 "state_key": state_key,
                 "messages": [user_input],
                 "user_inputs": [user_input],
-                "next": "Planner"
+                "next": "Preprocess"
             }
         else:
             self.logger.info(f"[SESSION] Starting previous session from node: {self.state_dict[state_key]['next']}")
@@ -160,28 +160,24 @@ class MultiAgentSystem:
             self.logger.error(f"Graph stream failed: {e}")
 
 
-def main():
-    base_session = 17570 # Starting session number
-    step = "0"
-    question_id = 17
-    
+def test_queries(base_session, step, question_id, iterations):
     # Load the questions
     with open("src/data/example_questions.json", "r", encoding='utf-8') as f:
         data = json.load(f)
-    
+
     # Find the question with the specified ID
     user_input = ""
     for question in data.get("questions", []):
         if question.get("id") == question_id:
             user_input = question.get("text")
             break
-    
+
     if not user_input:
         print(f"Question with ID {question_id} not found!")
         return
     
     # Run the system 10 times with incrementing session numbers
-    for i in range(10):
+    for i in range(iterations):
         session = str(base_session + i)
         print(f"Running iteration {i+1}/10 with session {session}")
         
@@ -191,21 +187,19 @@ def main():
         
         print(f"Completed iteration {i+1}/10")
 
-    # session = "11000" # This can be anything - numbers are useful for keep tracking of what queries were ran
-    # step = "0" # If -1, will skip saving states.
-    # system = MultiAgentSystem(session = session, step = step)
 
-    # question_id = 11
+def main():
+    base_session = "31001" # Starting session number
+    step = "0"
+    # question_id = 16
+    # iterations = 1
 
-    # with open("src/data/example_questions.json", "r", encoding='utf-8') as f:
-    #     data = json.load(f)    
-    
-    # user_input = ""
-    # for question in data.get("questions", []):
-    #     if question.get("id") == question_id:
-    #         user_input = question.get("text")
+    # test_queries(base_session, step, question_id, iterations)
 
-    # system.run(user_input)
+    system = MultiAgentSystem(session=base_session, step=step)
+
+    user_input = "What is the largest fof_halo in timestep 624 of simulation 0?"
+    system.run(user_input)
 
 
 

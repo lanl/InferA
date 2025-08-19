@@ -1,3 +1,18 @@
+"""
+Module: data_loader.py
+Purpose: Provides tools and functions to:
+    - Build an index of simulation data files.
+    - Load selected simulation data into a DuckDB database.
+    - Enrich the data with metadata such as timestep and object type.
+    - Integrate with LangGraph via @tool decorators for structured pipelines.
+
+Main Tools:
+    - load_file_index: Indexes file paths for selected simulations, timesteps, and object types.
+    - load_to_db: Loads selected columns from simulation files into a DuckDB table with metadata.
+    - index_simulation_directories: Helper to recursively index the simulation analysis folders.
+"""
+
+
 import os
 import sys
 import re
@@ -20,11 +35,13 @@ from langgraph.prebuilt import InjectedState
 from src.utils.dataframe_utils import pretty_print_df
 from config import WORKING_DIRECTORY, SIMULATION_PATHS
 
+# Add genericio to sys path
 genericio_path = "genericio/legacy_python/"
 sys.path.append(genericio_path)
 import genericio as gio
 
 logger = logging.getLogger(__name__)
+
 
 
 @tool(parse_docstring=True)
@@ -52,6 +69,7 @@ def load_to_db(columns: list, object_type: str, state: Annotated[dict, InjectedS
     if not file_index:
         raise ValueError("MissingFileIndexError: The file index is missing from state. Use the DataLoader to extract relevant files.")
 
+    # Construct database path
     if session_id:
         DUCKDB_DIRECTORY = f"{WORKING_DIRECTORY}{session_id}/{session_id}.duckdb"
     else:
@@ -65,34 +83,32 @@ def load_to_db(columns: list, object_type: str, state: Annotated[dict, InjectedS
 
     logger.debug(f"[load_to_db() TOOL] Connected to database: {DUCKDB_DIRECTORY}")
     table_initialized = False
-    
-    total_files = sum(len(file_index[sim][ts]) for sim in file_index for ts in file_index[sim])
-    logger.debug(f"[load_to_db() TOOL] Writing file index to db. Total files to write: {total_files}\n       Using columns: {columns}")
 
+    # Gather all files matching object type
     all_files = [
         (sim, ts, obj, file_path)
         for sim in file_index
         for ts in file_index[sim]
         for obj, file_path in file_index[sim][ts].items()
         if obj == object_type
-    ]
+    ]  
 
+    total_files = sum(len(file_index[sim][ts]) for sim in file_index for ts in file_index[sim])
     iterator = tqdm(all_files, desc= "Loading files") if total_files > 10 else all_files
+    logger.debug(f"[load_to_db() TOOL] Writing file index to db. Total files to write: {total_files}\n       Using columns: {columns}")
 
     for sim, ts, obj, file_path in iterator:
         try:
             data = gio.read(file_path, columns)
         except Exception as e:
             raise ValueError(
-                f"ColumnReadError: Failed to read columns {columns} from {file_path}. Likely cause: missing or misspelled column names. Error: {e}"
+                f"ColumnReadError: Failed to read columns {columns} from {file_path}. \nLikely cause: missing or misspelled column names. \n    Error: {e}"
             )
         
         if total_files <= 5:
             logger.info(f"\n- File: {file_path}")
 
         df = pd.DataFrame(np.column_stack(data), columns=columns)
-
-        # Add metadata
         df["simulation"] = int(sim)
         df["time_step"] = int(ts)
         df["object_type"] = str(obj)
@@ -119,6 +135,7 @@ def load_to_db(columns: list, object_type: str, state: Annotated[dict, InjectedS
 
     db_columns.append(columns)
     db_tables.append(object_type)
+
     return Command(update={
         "db_path": DUCKDB_DIRECTORY,
         "db_tables": db_tables,
@@ -137,13 +154,14 @@ def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: A
     """Load file index from a simulation file based on simulation index, timestep and object to load. 'simulation', 'timestep' and 'object' must be explicitly stated.
     
     Args:
-        sim_idx: List of simulation indexes. Index can be between 0-3.
-        timestep: List of timestep(s) of simulation to load from. If user asks for all timesteps or is unclear which timestep, instead load all timesteps - set timestep = [-1].
+        sim_idx: List of simulation indexes from the simulation path. Index starts at 0. If user asks for all simulations or is unclear which simulation to use, instead load all simulations - set simulation = [-1]
+        timestep: List of timestep(s) of simulation to load from. If user asks for all timesteps or is unclear which timestep to use, instead load all timesteps - set timestep = [-1].
         object: List of object types in simulation to load (maximum of 4 object types). Must be one of the following: [haloproperties, galaxyproperties, haloparticles, galaxyparticles]
 
     Returns:
         dict: Nested dictionary index of all relevant files
     """
+    # Show available simulation paths
     for idx, path in enumerate(SIMULATION_PATHS):
         logger.info(f"Simulation {idx}: {path}")
 
@@ -153,14 +171,14 @@ def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: A
     index = index_simulation_directories(SIMULATION_PATHS, valid_object_types)
     sim_ids = list(index.keys())
 
-    if isinstance(sim_idx, int):
-        sim_idx = [sim_idx]
+    # Normalize inputs
+    sim_idx = [sim_idx] if isinstance(sim_idx, int) else sim_idx
+    timestep = [timestep] if isinstance(timestep, int) else timestep
+    object = [object] if isinstance(object, str) else object
 
-    if isinstance(timestep, int):
-        timestep = [timestep]
-
-    if isinstance(object, str):
-        object = [object]
+    # sim_idx = [-1] means "all simulations"
+    if sim_idx == [-1]:
+        sim_idx = list(range(len(sim_ids)))  # Assumes 1-to-1 with SIMULATION_PATHS
 
     result = {}
     
@@ -168,13 +186,14 @@ def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: A
         sim_id = sim_ids[i]
         result[i] = {}
 
-        if timestep == [-1]:  # All timesteps
+        if timestep == [-1]:
+            # Include all timesteps
             for ts, data in index[sim_id].items():
                 filtered = {obj: data[obj] for obj in object if obj in data}
                 if filtered:
                     result[i][ts] = filtered
         else:  # Specific timesteps
-            # Validate all timesteps first
+            # Validate requested timesteps
             missing_timesteps = [ts for ts in timestep if ts not in index[sim_id]]
             if missing_timesteps:
                 raise Exception("TimeStepError")
@@ -200,11 +219,18 @@ def load_file_index(sim_idx: list, timestep: list, object: list, tool_call_id: A
 
 def index_simulation_directories(root_paths: List[str], valid_object_types: set) -> Dict[Tuple[float, float, float], Dict[int, Dict[str, str]]]:
     """
-    Builds a hierarchical index from simulation analysis directories.
-    Expected file structure:
-    ROOT/FSN_{float}_VEL_{float}_TEXP_{float}/analysis/m000p-{timestep}.{object_type}
+    Recursively indexes all simulation files in analysis folders.
 
-    Only object types in `valid_object_types` are included.
+    Expected structure:
+        ROOT/FSN_{float}_VEL_{float}_TEXP_{float}/analysis/m000p-{timestep}.{object_type}
+
+    Args:
+        root_paths (List[str]): Base simulation directories.
+        valid_object_types (set): Valid file suffixes (object types) to include.
+
+    Returns:
+        Dict: A nested dict with the structure:
+              {simulation_id: {timestep: {object_type: file_path}}}
     """
     index = defaultdict(lambda: defaultdict(dict))
 
@@ -242,5 +268,7 @@ def index_simulation_directories(root_paths: List[str], valid_object_types: set)
     return index
 
 
+
+# Optional for testing or CLI
 if __name__ == "__main__":
-    main()
+    raise NotImplementedError("This script is intended to be used as a module, not run directly. You can use this to test your data loading function.")

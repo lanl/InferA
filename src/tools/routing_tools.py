@@ -1,8 +1,18 @@
-from typing import Annotated
+"""
+Module: routing_tool.py
+Purpose: This module defines a single redirection tool used to delegate tasks between agents
+         in a LangGraph-based multi-agent system.
 
+Functions:
+    - redirect(next, task, tool_call_id): Routes the current task to the appropriate specialized agent.
+"""
+
+from typing import Annotated
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import InjectedToolCallId, tool
 from langgraph.types import Command
+
+
 
 @tool(parse_docstring=True)
 def redirect(

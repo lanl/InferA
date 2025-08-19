@@ -4,14 +4,13 @@
       "id": 1,
       "text": "How does the slope and normalization of the gas-mass fraction–mass relation (sod_halo_MGas500c/sod_halo_M500c) evolve from the earliest timestep to the latest timestep in simulation 0?",
       "original": "How does the slope and normalization of the gas-mass fraction–mass relation (M_gas,500c/M_500c vs. M_500c) evolve from z = 2 to z = 0 in a fiducial physics model? At which mass scales is the strongest redshift-driven evolution observed, and does the relation steepen or flatten over time?",
-      "analysis_difficulty": "Hard",
       "expertise_difficulty": "Medium",
       "scale": "multi-timestep, single-simulation"
     },
     {
       "id": 2,
-      "text": "Within a single simulation, how does the intrinsic scatter of the concentration–mass relation for all haloes evolve from z = 2 down to z = 0? At which redshift does the scatter peak, and does that coincide with known epochs of rapid mass accretion or merger activity?",
-      "analysis_difficulty": "Hard",
+      "text": "Within simulation 0, how does the intrinsic scatter (natural variability) of the log concentration–mass relation for all haloes evolve from the earliest timestep to the latest timestep? At which timestep does the scatter peak?",
+      "original": "Within a single simulation, how does the intrinsic scatter of the concentration–mass relation for all haloes evolve from z = 2 down to z = 0? At which redshift does the scatter peak, and does that coincide with known epochs of rapid mass accretion or merger activity?",
       "expertise_difficulty": "Hard",
       "scale": "multi-timestep, single-simulation"
     },
@@ -19,161 +18,139 @@
       "id": 3,
       "text": "What is the timestep evolution of the core-excluded X-ray luminosity–mass scaling, given by sod_halo_L500cBoloEx / M_500c, starting from the first timestep to the last timestep in simulation 0?",
       "original": "What is the redshift evolution of the core-excluded X-ray luminosity–mass scaling, L_500cBoloEx–M_500c, between z = 1 and z = 0 in a single subgrid model?",
-      "analysis_difficulty": "Medium",
       "expertise_difficulty": "Easy",
       "scale": "multi-timestep, single-simulation"
     },
     {
       "id": 4,
-      "text": "In simulation 0, how does the ratio of gas to dark-matter velocity dispersions for cluster-scale haloes evolve from the earliest timestep to the latest timestep? Does the velocity bias grow, shrink, or remain constant over this interval, and what might that imply about turbulent support in the intracluster medium?",
+      "text": "In simulation 0, how does the ratio of gas to dark-matter halo velocity dispersions for cluster-scale haloes evolve from the earliest timestep to the latest timestep? Does the velocity bias grow, shrink, or remain constant over this interval?",
       "original": "In a fiducial simulation, how does the ratio of gas to dark-matter velocity dispersions for cluster-scale haloes evolve from z = 1 to z = 0? Does the velocity bias grow, shrink, or remain constant over this interval, and what might that imply about turbulent support in the intracluster medium?",
-      "analysis_difficulty": "Hard",
       "expertise_difficulty": "Hard",
       "scale": "multi-timestep, single-simulation"
     },
     {
       "id": 5,
-      "text": "At the latest timestep, how does the ratio of integrated Compton Y-parameters (Y_5R500c/Y_500c) depend on the combination of wind energy injection (e_w) and AGN feedback velocity (v_kin)? Are there (e_w, v_kin) pairs that produce anomalously high or low Y-ratios, suggesting altered pressure profiles?",
+      "text": "Simulation 0 was run with the following parameters: FSN = 0.5387, VEL = 149.279, TEXP = 9.613, BETA = 0.8710, SEED = 9.548e5. Simulation 2 was run with the following parameters: FSN = 0.4484, VEL = 174.181, TEXP = 9.952, BETA = 0.7258, SEED = 3.129e5. At timestep 624, how does the ratio of integrated Compton Y-parameters (Y_5R500c/Y_500c) depend on the combination of FSN and VEL?",
       "original": "At z = 0, how does the ratio of integrated Compton Y-parameters (Y_5R500c/Y_500c) depend on the combination of wind energy injection (e_w) and AGN feedback velocity (v_kin)? Are there (e_w, v_kin) pairs that produce anomalously high or low Y-ratios, suggesting altered pressure profiles?",      
-      "analysis_difficulty": "Medium",
-      "expertise_difficulty": "Hard",
+      "expertise_difficulty": "Medium",
       "scale": "single-timestep, single-simulation"
     },
     {
       "id": 6,
       "text": "For haloes above 10^12 MStar at timestep = 624, how does the correlation between star formation rate (sod_halo_sfr) and star-forming gas mass (sod_halo_mass_sfgas) change across all simulations? Which simulation leads to more scatter or a systematic offset in the SFR–gas mass relation?",
       "original": "For haloes above 10^12 M_⊙ at z=0, how does the correlation between instantaneous star formation rate (sod_halo_sfr) and star-forming gas mass (sod_halo_mass_sfgas) change as the black-hole seed mass (M_seed) is varied? Do larger M_seed values lead to more scatter or a systematic offset in the SFR–gas mass relation?",
-      "analysis_difficulty": "Hard",
       "expertise_difficulty": "Hard",
       "scale": "single-timestep, single-simulation"
     },
     {
       "id": 7,
-      "text": "At the latest timestep, how does the slope and intrinsic scatter of the stellar-to-halo mass (SMHM) relation vary as a function of galactic wind velocity (K_w) alone, holding all AGN parameters fixed? Which K_w values produce the tightest SMHM correlation, and is there a threshold wind speed that maximizes stellar-mass assembly efficiency?",
+      "text": "Simulation 0-3 was initialized with a seed mass of 9.548e5, 1.387e5, 3.129e5, and 1.652e6 respectively. This initialization parameter is not in the data set so you must provide instructions to use it. At timestep 624, how does the slope and intrinsic scatter of the stellar-to-halo mass (SMHM) relation vary as a function of seed mass? Which seed mass values produce the tightest SMHM correlation, and is there a threshold seed mass that maximizes stellar-mass assembly efficiency?",
       "original": "At z = 0, how does the slope and intrinsic scatter of the stellar-to-halo mass (SMHM) relation vary as a function of galactic wind velocity (K_w) alone, holding all AGN parameters fixed? Which K_w values produce the tightest SMHM correlation, and is there a threshold wind speed that maximizes stellar-mass assembly efficiency?",
-      "analysis_difficulty": "Hard",
       "expertise_difficulty": "Hard",
       "scale": "single-timestep, multi-simulation"
     },
     {
       "id": 8,
-      "text": "How does the timestep evolution of the concentration–mass relation differ between the top 100 most relaxed and 100 most unrelaxed haloes when varying wind velocity (K_w) across the 64 simulations? Which K_w regimes yield the largest divergence in slope or scatter at the earliest timestep, a timestep in the middle of the simulation, and the latest timestep, and is there a critical K_w beyond which relaxed and unrelaxed populations decouple most strongly?",
+      "text": "Simulation 0-3 was initialized with a seed mass of 9.548e5, 1.387e5, 3.129e5, and 1.652e6 respectively. These parameters are not included in the dataset, you will have to add the seed mass of each simulation directly as columns constant with each simulation. For example, all particles from simulation 0 will have seed mass = 9.548e5. How does the concentration–mass relation differ between the top 100 most relaxed and 100 most unrelaxed haloes when varying seed mass across all simulations at timestep 624? Which seed mass yield the largest divergence at timestep 624, and is there a critical seed mass beyond which relaxed and unrelaxed populations decouple most strongly?",
       "original": "How does the redshift evolution of the concentration–mass relation differ between the top 100 most relaxed and 100 most unrelaxed haloes when varying wind velocity (K_w) across the 64 simulations? Which K_w regimes yield the largest divergence in slope or scatter at z = 0, 1, and 2, and is there a critical K_w beyond which relaxed and unrelaxed populations decouple most strongly?",
-      "analysis_difficulty": "Hard",
       "expertise_difficulty": "Hard",
       "scale": "single-timestep, multi-simulation"
     },
     {
       "id": 9,
-      "text": "In what ways do AGN parameters—black-hole seed mass (M_seed) and kinetic feedback efficiency (e_kin)—shift the rise and fall of the cosmic star formation rate density from the earliest timestep to the latest timestep? Do larger M_seed values systematically delay peak cSFR, and does higher e_kin accelerate the low-z downturn, or are there non-linear interactions between M_seed and e_kin?",
+      "text": "Simulation 0 was run with the following parameters: FSN = 0.5387, BETA = 0.8710, SEED = 9.548e5. Simulation 1 was run with the following parameters: FSN = 0.5387, BETA = 0.8710, SEED = 1.387e5. Simulation 2 was run with the following parameters: FSN = 0.4484, VEL = 174.181, TEXP = 9.952, BETA = 0.7258, SEED = 3.129e5. Simulation 3 was run with the following parameters: FSN = 0.4484, VEL = 174.181, TEXP = 9.952, BETA = 0.7258, SEED = 1.652e6. These parameters are not included in the dataset, you will have to add each parameter as constant columns with each simulation. In what ways do FSN, SEED and BETA parameters affect cosmic star formation rate (sod_halo_sfr) at timestep 624?",
       "original": "In what ways do AGN parameters—black-hole seed mass (M_seed) and kinetic feedback efficiency (e_kin)—shift the rise and fall of the cosmic star formation rate density from z = 2 to z = 0? Do larger M_seed values systematically delay peak cSFR, and does higher e_kin accelerate the low-z downturn, or are there non-linear interactions between M_seed and e_kin?",
-      "analysis_difficulty": "Hard",
-      "expertise_difficulty": "Hard",
-      "scale": "multi-timestep, single-simulation"
-    },
-    {
-      "id": 10,
-      "text": "Gas Morphology vs. Wind Velocity: How does the 3D morphology of the gas distribution within a single halo change as wind velocity (K_w) varies, compared across all simulations?",
-      "original": "Gas Morphology vs. Wind Velocity: How does the 3D morphology of the gas distribution within a single halo change as wind velocity (K_w) varies, compared across the 64 simulations?",
-      "analysis_difficulty": "Medium",
       "expertise_difficulty": "Medium",
       "scale": "single-timestep, multi-simulation"
     },
     {
+      "id": 10,
+      "text": "Simulation 0 with a seed mass of 9.548e5. Gas Morphology vs. Seed Mass: How does the 3D morphology of the gas distribution (halo particles) within a single halo change as seed mass varies, compared across all simulations? Find all particles associated with fof_halo_tag = '251375070' in timestep 498 of simulation 0. Also set a column with the constant seed mass per simulation as mentioned.",
+      "original": "Gas Morphology vs. Wind Velocity: How does the 3D morphology of the gas distribution within a single halo change as wind velocity (K_w) varies, compared across the 64 simulations?",
+      "expertise_difficulty": "Hard",
+      "scale": "single-timestep, single-simulation"
+    },
+    {
       "id": 11,
       "text": "Can you plot the change in mass of the largest friends-of-friends halos for all timesteps in all simulations? Provide me two plots using both fof_halo_count and fof_halo_mass as metrics for mass.",
-      "analysis_difficulty": "Hard",
       "expertise_difficulty": "Easy",
       "scale": "multi-timestep, multi-simulation"
     },
     {
       "id": 12,
       "text": "Visualize all halos within 20 Mpc of the halo with fof_halo_tag = '251375070' for timestep 498 of simulation 0. Highlight the target halo.",
-      "analysis_difficulty": "Easy",
       "expertise_difficulty": "Easy",
       "scale": "single-timestep, single-simulation"
     },
     {
       "id": 13,
       "text": "Can you find me the top 20 largest friends-of-friends halos from timestep 498 in simulation 0?",
-      "analysis_difficulty": "Easy",
       "expertise_difficulty": "Easy",
       "scale": "single-timestep, single-simulation"
     },
     {
       "id": 14,
       "text": "For simulation 0 and simulation 1, can you track the halo closest to coordinate (123, 117, 105) in timestep = 54 across all timesteps. Afterwards, visualize the halo at each timestep and show interesting characteristics for how evolution of mass differed between the equivalent halo from different simulations?",
-      "analysis_difficulty": "Medium",
       "expertise_difficulty": "Medium",
       "scale": "multi-timestep, multi-simulation"
     },
     {
       "id": 15,
       "text": "Find me the 10 friends-of-friends halos and 10 galaxies closest in coordinates to the halo with fof_halo_tag = '251375070' in timestep 498 of simulation 0.",
-      "analysis_difficulty": "Medium",
-      "expertise_difficulty": "Medium",
+      "expertise_difficulty": "Easy",
       "scale": "single-timestep, single-simulation"
     },
     {
       "id": 16,
       "text": "In timestep 498 in simulation 0, can you show me how well-aligned in coordinate the 100 largest galaxies are to the 10 largest halos? In addition, for each halo and galaxy that is aligned, provide the ratio of their mass, galaxy mass/halo mass",
-      "analysis_difficulty": "Hard",
       "expertise_difficulty": "Medium",
       "scale": "single-timestep, single-simulation"
     },
     {
       "id": 17,
       "text": "A leading theory in cosmology is that galaxies form in dark matter halos. It would be interesting to know the characteristics of galaxies that form in the largest halos. First find the two largest halos by their halo count in timestep 624 of simulation 0. Then find the top 10 galaxies associated to those two halos related by fof_halo_tag. What are the differences in characteristics of the 2 groups of galaxies? For example, what are differences in their gas-mass, mass, or kinetic energy?",
-      "analysis_difficulty": "Hard",
       "expertise_difficulty": "Hard",
       "scale": "single-timestep, single-simulation"
     },
     {
       "id": 18,
       "text": "Can you plot the largest galaxy in every timestep in simulation 2?",
-      "analysis_difficulty": "Easy",
       "expertise_difficulty": "Easy",
       "scale": "multi-timestep, single-simulation"
     },
     {
       "id": 19,
       "text": "I would like to find the most unique halos in simulation 0 at timestep 498. Using velocity, mass, and kinetic energy of the halos, generate an 'interestingness' score and plot the top 1000 halos as a umap plot, highlighting the top 20 halos in simulation 0 that are the most interesting.",
-      "analysis_difficulty": "Medium",
       "expertise_difficulty": "Medium",
       "scale": "single-timestep, single-simulation"
     },
     {
       "id": 20,
       "text": "Can you plot a timeseries plot for the 10 largest halos at every timestep in simulation 0? At each timestep also include every halo within a distance of 10 Mpc.",
-      "analysis_difficulty": "Hard",
       "expertise_difficulty": "Easy",
       "scale": "multi-timestep, single-simulation"
     },
     {
       "id": 21,
       "text": "Simulation 0 was run with the following parameters: FSN = 0.5387, VEL = 149.279, TEXP = 9.613, BETA = 0.8710, SEED = 9.548e5. Simulation 2 was run with the following parameters: FSN = 0.4484, VEL = 174.181, TEXP = 9.952, BETA = 0.7258, SEED = 3.129e5. Can you make an inference on the direction of the FSN and VEL paramaters in order to increase the fof_halo_count of the 100 largest halos in timestep 624? Also plot a summary of the differences in halo characteristics between the two simulations.",
-      "analysis_difficulty": "Medium",
       "expertise_difficulty": "Medium",
       "scale": "single-timestep, multi-simulation"
     },
     {
       "id": 22,
       "text": "Across all the simulations, what is the average size (fof_halo_count) of halos at each time step?",
-      "analysis_difficulty": "Medium",
       "expertise_difficulty": "Easy",
       "scale": "multi-timestep, multi-simulation"
     },
     {
       "id": 23,
       "text": "A theory in cosmology is that the galaxies form in halos. I would be interested in seeing if the largest galaxies form inside the largest halos. Please find the largest 100 galaxies and 100 halos at timestep 498 in simulation 0. I would like to plot all of them in Paraview and also see how well aligned those galaxies and halos are to each other.",
-      "analysis_difficulty": "Hard",
       "expertise_difficulty": "Easy",
       "scale": "single-timestep, single-simulation"
     },
     {
       "id": 24,
       "text": "Simulation 0 was run with the following parameters: FSN = 0.5387, VEL = 149.279, TEXP = 9.613, BETA = 0.8710, SEED = 9.548e5. Simulation 2 was run with the following parameters: FSN = 0.4484, VEL = 174.181, TEXP = 9.952, BETA = 0.7258, SEED = 3.129e5. Can you make a prediction for how the 10 largest halos (full halos, not halo particles) at timestep = 498 might change if FSN was somewhere between these two simulations, say at FSN = 0.49?",
-      "analysis_difficulty": "Medium",
       "expertise_difficulty": "Hard",
       "scale": "single-timestep, multi-simulation"
     }

@@ -24,14 +24,15 @@ We've developed a multi-agent approach to break down complex data analysis tasks
 
 ## Key Features
 - Human-in-the-Loop: Allows continuous human feedback and supervision
-- State Persistence: Saves all generated outputs and states for easy "time travel"
+- Provenance Tracking: Keeps all intermediate data, code, and reasoning so workflows can be replicated
+- State Persistence: Saves all states to allow "time travel" to intermediate steps in previous runs
 - Metadata-Aware Reasoning: Uses RAG for context-aware column selection
 - Sandboxed Code Execution: Ensures data integrity with read-only access to the main dataset
 - Optimized Token Usage: Efficient agent communication (Average run: <40,000 tokens, ~$0.09 with GPT-4)
 
 # Getting Started
 
-# Setting up local ollama
+## Setting up local ollama
 
 1. Installing ollama - follow the first part of these instructions: 
 https://copdips.com/2025/03/installing-ollama-without-root.html
@@ -64,7 +65,7 @@ or
 ~/opt/ollama/bin/ollama pull mistral-small3.1:latest
 ```
 
-# Create a python environment
+## Create a python environment
 
 1. In your project ollama folder, python environment created via:
 ```
@@ -78,14 +79,14 @@ source venv_InferA/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-# Add genericio module
+## Add genericio module
 
 1. If you haven't setup remote_gio_explorer yet, do that. I copied the genericio directory here to import.
 ```
 git clone git@gitlab.lanl.gov:exasky/remote_gio_explorer.git # or git clone https://gitlab.lanl.gov/exasky/remote_gio_explorer.git 
 ```
 
-# Running
+## Running
 
 1. Get a node with gpu
 ```
@@ -117,9 +118,13 @@ source venv_InferA/bin/activate
 
 5. Run main.py or any of the test_*.ipynb
 
+The easiest way to test is via main.py
+- Change user_input to the query you want e.g "What is the largest object in the dataset?" and run via system.run(user_query)
+- You can also use the test function in main.py
+- You can run in a jupyter notebook - see 1a_sample_easy.ipynb or 1b_sample_medium.ipynb.
+
 # Contact
-
-
+You may contact me at justinztam@lanl.gov for any questions about running the software.
 
 # LICENSE
 
